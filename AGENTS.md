@@ -839,3 +839,18 @@ Open / not verified:
 - f-io/LIVI: multi-touch CarPlay HID descriptors.
 - mapbox-navigation-ios v0.40.0: the maneuver drawings (ISC).
 - NBT-AAD USB Tools (Yalozo/nbt-aad-usb-tools, MIT): the installer's pre-installation checks.
+
+
+## 2026-11-25 F56 TX=4 vehicle-result addendum
+
+The later MINI F56 vehicle run supersedes the earlier source-only status for visible output:
+
+- The historical 60-second capture summary records HUD transmissionType 4, HUDTerminal 82/00 and maneuver distances of 160 m, 170 m and 10 m.
+- The user-supplied photo shows the 170 m right-turn prompt on the CarPlay center display and stock instrument cluster together; the companion photo set shows a 10 m left turn.
+- The run summary records 26 new log lines and seven of seven evidence-file SHA-256 checks passed.
+- This establishes a vehicle-observed visible result on the tested F56. It does not establish a positive C04 ImageGetSize response, picture-buffer dimensions, a controlled TX=0 comparison or the complete native handle lifecycle.
+- The historical tested librghook-most.so hash is only available here as prefix d0e448…; the full evidence archive and complete tested binary hash are not in this checkout.
+- The current checked-in plugin/librghook-most.so is a different binary. Do not treat it as the tested TX=4 payload or install it on that basis.
+- The raw capture and seven-file evidence manifest must be re-imported into this clone. Do not claim that evidence/original-captures-2026-11-25/ or EVIDENCE-MANIFEST.json is present; they are absent from the current working tree.
+
+See docs/MINI_F5X_TECHNICAL_RESEARCH.md, docs/MINI_6WB_TXCONTROL.md and docs/MINI_F5X_CLUSTER_FAMILY.md for the full evidence matrix and open work. Keep hud_tx=0 as the default, TX=4 experimental, and do not enable HUD debug logging on the vehicle as part of this documentation update.

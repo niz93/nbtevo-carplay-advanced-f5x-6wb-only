@@ -1,77 +1,145 @@
-# MINI F5x shared instrument-panel family
+# MINI_F5X shared instrument-panel family
 
-## Family rule
+## Scope
 
-**User-confirmed:** MINI F54, F55, F56, F57 and F60 use the same physical instrument panel. The project therefore treats them as one panel family, **MINI_F5X**. Do not create separate instrument-panel profiles solely because the chassis code differs.
+The user confirms that MINI F54, F55, F56, F57 and F60 share the same physical digital instrument-panel family. This project records that family as **MINI_F5X**.
 
-This is a shared-panel rule, not a claim that every vehicle has identical HMI software, firmware build, coding, equipment, projected-HUD availability, terminal instances, MOST transport settings, or visible rendering. Preserve the actual vehicle and HMI build as provenance for every capture. A result about the shared physical panel can be reused at family level; software- and runtime-specific conclusions still require their own evidence.
+This is a statement about the physical panel family. It is not proof that the five chassis use identical:
 
-The MINI F5x stock digital instrument panel must not be conflated with the **BMW 6WB** layout profile. In this codebase, `g_6wb` means the BMW F-series multifunction-cluster layout. The external issue's wording "MINI 6WB" is a MINI/F5x-labelled surface, not a reason to classify an F5x chassis as a BMW 6WB cluster.
+- HMI software or firmware;
+- NBT Evo generation, coding or feature configuration;
+- MOST endpoint, DSI transport type, terminal instance or native handle setup;
+- navigation application, route-guidance source or display layout.
 
-## Evidence retained in this branch
+The project must keep BMW F-series **6WB** as a separate cluster/layout profile. The g_6wb flag in src/hud.h refers to BMW 6WB, not the shared MINI panel. External issue #176 uses the wording “MINI 6WB” in a MINI F60 context; do not use that phrase to merge the two profiles.
 
-All original user-supplied captures are preserved unchanged under `evidence/original-captures-2026-11-25/`. `EVIDENCE-MANIFEST.json` records the original upload identifiers, byte sizes and SHA-256 hashes. The raw source files were copied with matching byte size and SHA-256.
+## Evidence status
 
-### F54 baseline
+**Important repository correction:** this local checkout does not contain the raw evidence directory previously referenced in project notes. Neither evidence/original-captures-2026-11-25/ nor EVIDENCE-MANIFEST.json is present in this working tree. Capture names and summarized results below come from earlier project records; the raw capture bytes and original hashes must be re-imported before this clone can claim to preserve or independently re-audit them.
 
-The existing in-car baseline is MINI F54, HMI 1703, tested 2026-11-11/12, with follow-up HUD measurements on 2026-11-13. It establishes the learned MINI panel handle map and picture-box/surface observations recorded in `AGENTS.md`. The setup fixture in `tests/test_hud_handles.py` and `tests/test_hud_init.py` is explicitly the F54 capture, reused as the shared MINI_F5X panel-family fixture.
+The current dossier distinguishes user-confirmed family information, real-vehicle observations, source-derived behavior, host simulations and unresolved assumptions.
 
-Keep "captured/tested on F54" in provenance. Do not rewrite it as a direct test on every F5x model.
+## F54 baseline: HMI ID5_1703-490-1650ZD Build 139
 
-### F56 passive OEM navigation capture
+**Status: VEHICLE-OBSERVED on the tested F54 only.**
 
-Source: `mini-f56-native-nav-20261125-040320-116770.txt`
+The inherited AGENTS.md record documents the F54 test sessions:
 
-- Vehicle is identified in the capture as MINI F56; the window is 60 seconds on HUDTerminal 82/00 at device 0101.
-- 215 OEM events are present: 31 `0x204`, 167 `0x21D`, 14 `0x20E`, and 3 `0x227`.
-- The observed handles across those messages are 1, 2, 3, 4, 5, 6, 7, 8 and 0x16.
-- `0x21D` drawing uses handles 5, 6 and 7; `0x20E` visibility switching shows the 5/6 pair and the 8-to-7 relation; `0x227` addresses handle 0x16.
-- There are **zero** `0x200 CreateInstance` and **zero** `0x22B FrameAddItem` events in this capture window. No `0xC04 ImageGetSize` request is present either.
-- The header's 1/2/3/4, 5/6 and 0x16 handle map is retained from an earlier start. It is not a setup exchange observed inside this 60-second window.
-- The capture is therefore valid F56 OEM drawing/visibility evidence, but it is not a complete native setup/allocator/handle-lifecycle capture. The returned log explicitly excludes the `0x210` street-text payloads.
+- 2026-11-11/12: full-width CarPlay output; controller knob tilts, held-tilt repeat, rotation and press; touchpad navigation and gestures; MOST HUD pictures and route guidance; boot hook and recovery links.
+- 2026-11-13: settings submenus, persistence and restart behavior; boot-loop guard; Apple Maps zoom; polygon drawing; HUD fill/blink effects with a simulated route.
+- The test baseline is specific to the F54 and the HMI build above. It must not be presented as a direct test of F55, F56, F57 or F60.
 
-### F56 HUD Probe reports
+### F54 native handle map
 
-The two later reports are:
+The recorded F54 setup contains 22 instance creations and frames 01, 0B and 10. The learned handles are:
 
-- `hud-probe-v1.3.0-20261125-041729-717486.txt`
-- `hud-probe-v1.3.0-20261125-042222-571911.txt`
+| Handle | Role |
+|---:|---|
+| 1 | Panel |
+| 2 | Unit |
+| 3 | Street |
+| 4 | Distance |
+| 5 / 6 | Double-buffered maneuver picture |
+| 0x16 | Bargraph |
 
-Both identify the vehicle as a **MINI F56 stock digital instrument cluster; not BMW 6WB**, with HMI `NBTevo_ID5_2111-540-2142A Build 28`.
+The F54 C04 ImageGetSize request uses the handle-only payload. The alternate BMW 6WB form with an extra 0x01 byte was rejected on the tested F54 terminal with an invalid-length ErrorAck.
 
-Each report records 128 `0xC04 ImageGetSize` requests (handles 0x01–0x40 in both tested payload forms) and 128 `ErrorAck 0x41` responses. Neither report records a positive image size. The visual test result is `mini: cluster n`; visible rendering is therefore **not confirmed** by these reports. The reports do not preserve the DSI TXControl value, so the `0x41` result must not be attributed to DSI transmissionType 0 or 4.
+### F54 measured surface sizes
 
-The earlier report `hud-probe-v1.3.0-20261125-032957-438623(1).txt` initially labels the vehicle "MINI F56 / 6WB instrument cluster". That wording is superseded by the two later reports, which explicitly distinguish the MINI stock digital panel from BMW 6WB.
+| Handle | Width × height |
+|---|---:|
+| 0x01 / 0x10 | 408 × 116 |
+| 0x02 | 250 × 27 |
+| 0x03 / 0x11 | 69 × 24 |
+| 0x04 | 33 × 21 |
+| 0x05–0x08, 0x0E, 0x0F | 120 × 72 |
+| 0x09 / 0x0A | 184 × 17 |
+| 0x0B | 227 × 72 |
+| 0x0C | 62 × 22 |
+| 0x0D | 33 × 22 |
+| 0x12 | 32 × 21 |
+| 0x13 / 0x14 | 250 × 116 |
+| 0x15 / 0x16 | 172 × 116 |
+| 0x17 | 39 × 39 |
 
-The probes show 82/00; they intentionally skip 82/02 visual patterns because a projected windscreen HUD was absent by the selected vehicle profile. This is not evidence about 82/02 rendering.
+The MINI picture box is mapped to approximately (35,15)-(85,65) for a 120 × 72 buffer. The recorded F54 night palette is route white (4), orange (5) and grey (3). The tested potentiometer calls did not expose a working distance bar.
 
-### External F60 transmissionType clue
+## F56 passive OEM navigation capture
 
-The external MINI F60 report in [Sq00ky/Supra-iDrive6-Android-Auto issue #176](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/issues/176) describes DSI `transmissionType` 0 requests rejected with `ErrorAck 0x41`, while read-only `ImageGetSize` with `transmissionType` 4 received a positive acknowledgement on a MINI/F5x-labelled surface. It is relevant family-level evidence because F60 belongs to MINI_F5X, but it does not prove that every F5x HMI/build needs transmissionType 4 or that drawing succeeds after the size query.
+**Status: VEHICLE-OBSERVED / PARTIAL.**
 
-## DSI transmissionType serialization contract
+The earlier capture is identified as mini-f56-native-nav-20261125-040320-116770.txt. The summarized 60-second window on HUDTerminal 82/00 contains 215 OEM messages:
 
-The `hud_tx` setting is an optional **DSI `transmissionType`** selector for MOST HUDTerminal FBlock 0x82 calls and the volatile test channel.
+| Function | Count |
+|---|---:|
+| 0x204 | 31 |
+| 0x21D | 167 |
+| 0x20E | 14 |
+| 0x227 | 3 |
 
-The DSI fields are serialized as:
+The observed handles include 1–8 and 0x16; drawing uses handles 5, 6 and 7. This capture window does not include 0x200 CreateInstance, 0x22B FrameAddItem or 0xC04 ImageGetSize. The handle map was carried over from an earlier start. The returned log excludes 0x210 street-text payloads.
 
-1. `transmissionType = hud_tx` (0 by default, optionally 4);
-2. `variantTag = 1` (`eTransmissionTXControl`);
-3. `variantValue = 0` (unchanged).
+This is OEM drawing/visibility evidence, not a complete native setup, handle-allocation or text-payload capture.
 
-Therefore `--hud-tx 0|4` changes only DSI `transmissionType`. It does **not** change `variantTag` or `variantValue`. AudioMaster volume continues to use DSI `transmissionType` 0. The default remains 0; value 4 is opt-in and is not vehicle-validated in this branch.
+## F56 HUD Probe and TX=4 result
 
-## Current acceptance boundary
+### Earlier probe failures
 
-| Item | State |
-|---|---|
-| Shared F54/F55/F56/F57/F60 physical panel family | USER-CONFIRMED |
-| F54 in-car drawing baseline | VERIFIED on F54 / HMI 1703 |
-| F56 passive OEM navigation drawing capture | PARTIAL; setup exchange absent |
-| F56 ImageGetSize probes | 128/128 ErrorAck 0x41 in each of two later reports; DSI transmissionType field unknown |
-| F56 visible test rendering | NOT CONFIRMED (`mini: cluster n`) |
-| F55/F57/F60 direct vehicle validation in this branch | NOT PERFORMED |
-| DSI transmissionType 4 on F5x | EXTERNAL CLUE ONLY; opt-in, not default |
-| BMW 6WB layout | Separate profile; not implied by MINI_F5X |
+The historical reports hud-probe-v1.3.0-20261125-041729-717486.txt and hud-probe-v1.3.0-20261125-042222-571911.txt each show 128 C04 requests and 128 ErrorAck 0x41 responses across handles 0x01–0x40 and two payload forms.
 
-No vehicle installation, restart, firmware action, MOST write, or car connection is part of this local family/documentation correction.
+Neither report preserves the DSI transmissionType field. The visual result was mini: cluster n. These reports establish that those particular requests were rejected; they do not establish the cause or prove that the later TX=4 path would fail.
+
+### Later F56 vehicle-observed result
+
+**Status: VISIBLE ROUTE GUIDANCE OBSERVED WITH transmissionType 4; PROTOCOL COMPLETENESS OPEN.**
+
+The later 2026-11-25 F56 test summary records:
+
+- 60-second capture and 26 new log lines;
+- HUD transmissionType 4;
+- HUDTerminal 82/00;
+- maneuver distances 160 m, 170 m and 10 m;
+- seven of seven files in the historical evidence check passed SHA-256 verification;
+- a user-supplied photo showing the 170 m right-turn prompt on the CarPlay center display and the instrument cluster together;
+- a companion photo showing a 10 m left-turn prompt.
+
+This is a real visible result on the tested F56. It is not a complete DSI protocol proof.
+
+The same run summary does not contain a positive C04 ImageGetSize response, measured picture-buffer dimensions or a picture-buffer response trace. A standalone hud_guidance.txt was absent, hud_debug was not enabled, and no controlled TX=0 comparison was performed. The tested librghook-most.so was recorded with hash prefix d0e448…; the complete tested binary and evidence archive are not present in this checkout.
+
+See the [real F56 vehicle photographs and provenance](images/README.md) and the [technical report gallery](MINI_F5X_TECHNICAL_RESEARCH.md#vehicle-photo-evidence). These photographs document visible output only.
+
+## Current DSI selector behavior
+
+The source supports optional hud_tx values 0 and 4. The default and invalid-value fallback are 0. The DSI header carries transmissionType as its own field, variantTag = 1 (eTransmissionTXControl), and variantValue remains 0.
+
+The selector is used for MOST HUDTerminal FBlock 0x82 drawing calls, mirror calls and the volatile test channel. AudioMaster volume calls remain at transmissionType 0.
+
+The C04 response filter checks transmissionType, response variant, source/destination, instance, function and handle. It does not claim that the DSI message tag is a proven request transaction ID; delayed same-TX/same-handle responses remain a correlation risk.
+
+See [MINI_6WB_TXCONTROL.md](MINI_6WB_TXCONTROL.md) for the DSI selector and C04 analysis, and [MINI_F5X_TECHNICAL_RESEARCH.md](MINI_F5X_TECHNICAL_RESEARCH.md) for the full evidence register.
+
+## Cross-chassis status
+
+| Chassis | Evidence in this project | Current claim |
+|---|---|---|
+| F54 | HMI 1703 vehicle sessions and native handle/geometry observations | Vehicle-observed baseline for that F54/HMI |
+| F55 | Shared physical panel confirmed by user; no direct test record in this checkout | Not independently validated |
+| F56 | Passive OEM capture, earlier C04 probes and later visible TX=4 route-guidance result | Vehicle-observed visible result; C04 and TX=0 A/B unresolved |
+| F57 | Shared physical panel confirmed by user; no direct test record in this checkout | Not independently validated |
+| F60 | External issue #176 transport clue only | No direct F60 drawing validation in this project |
+
+## Remaining work
+
+1. Re-import the raw F54/F56 captures, probe reports, latest TX=4 log and SHA-256 manifest.
+2. Record exact vehicle/HMI/coding metadata for every capture.
+3. Run controlled F56 TX=0/TX=4 A/B with full DSI headers and timestamps.
+4. Obtain a positive F56 C04 response and record handle, dimensions, payload form and timing.
+5. Capture CreateInstance, FrameAddItem, C04 and cleanup across a complete native navigation lifecycle.
+6. Validate text, Unicode, distance/unit rendering, Mapbox lane glyphs and 82/02 separately.
+7. Repeat on F54/F55/F56/F57/F60 independently before claiming family-wide compatibility.
+8. Rebuild the exact tested plugin binary and verify its SHA-256 against the vehicle evidence.
+
+## Safety and release boundary
+
+The later TX=4 visible result does not make the checked-in plugin payload a verified release. Keep TX=0 as the default, keep TX=4 opt-in, and do not install an unverified payload. This documentation update did not connect to the vehicle, install software, restart the head unit, enable HUD debug logging or alter the current vehicle installation.
