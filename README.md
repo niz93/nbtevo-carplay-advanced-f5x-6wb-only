@@ -1,245 +1,141 @@
-# nbtevo-carplay-advanced
+# MINI F5x 6WB — NBT Evo CarPlay Research
 
-Apple CarPlay add-ons for the BMW / MINI **NBT Evo** head unit (iDrive 5 and iDrive 6): a **CarPlay Advanced Settings** menu in
-Media/Radio, and the iPhone's **turn-by-turn directions in the cluster and the head-up display**.
+An independent research fork of [st1ng/nbtevo-carplay-advanced](https://github.com/st1ng/nbtevo-carplay-advanced), dedicated to the **MINI F5x platform and its 6WB digital instrument cluster**.
 
-It is an HMI plugin plus a few small libraries that hook into the head unit's own processes at run time. Apart from one line added
-to the boot script, no system file is replaced or patched on disk, and one installer script puts it on (and takes it off) over the car's ENET connection, with backups of everything
-it touches.
+The target is the MINI F5x family — **F54, F55, F56, F57 and F60** — equipped with the factory **6WB digital instrument cluster and without a separate windscreen Head-Up Display (HUD)**.
 
-> **Disclaimer.** This project is for **educational purposes only**. Run it only on a car you own, at your own risk: you alone are
-> responsible for whatever it does to your head unit, your car and its warranty, and for using it in line with the law where you
-> drive. Never operate it while driving. It comes with no warranty of any kind (see [LICENSE](LICENSE)).
+This repository is the place to investigate, document, test and develop the interaction between NBT Evo, Apple CarPlay route guidance and the F5x 6WB instrument cluster. The instrument cluster is the display target. Windscreen HUD functionality is not a project objective.
 
-## What it does
+> **Research project, not a ready-to-install product.** This fork inherits code and prebuilt files from the upstream project. A README change does not remove, disable or validate any inherited feature. Do not assume that the current installer or payload is already restricted to the F5x/6WB/no-windscreen-HUD configuration.
 
-### On iDrive 5: the CarPlay Advanced Settings menu
+## Project goals
 
-iDrive 5 HMIs give CarPlay a slot next to a side panel and send it only the knob's rotation and press. The menu plugin adds what
-iDrive 6 has natively, and a bit more:
+- Understand the F5x NBT Evo software environment and its interaction with the 6WB instrument cluster.
+- Trace CarPlay route-guidance data from the iPhone's iAP2 messages through the head unit to the cluster-facing implementation.
+- Investigate the original 6WB display services, MOST/DSI communication, display instances, handles, image dimensions, text fields, acknowledgements and lifecycle.
+- Develop and validate a cluster-focused route-guidance implementation for the F5x 6WB.
+- Document differences between vehicle configurations, NBT Evo generations, HMI software builds and coding.
+- Maintain reproducible offline tests and clearly labelled bench and vehicle evidence.
 
-- **Full-screen CarPlay**: CarPlay over the whole display, without the side panel. MINI: the iPhone renders 1184 x 480 on the
-  8.8" (tested in a car). BMW, BMW i and Rolls-Royce: 1440 x 540 on the 10.25", 1280 x 480 on the 8.8" (not tested in a car yet).
-- **iDrive control**
-  - **Knob tilts**: up / down / left / right move the CarPlay focus; a held tilt repeats.
-  - **Touchpad**: the iDrive controller's touch surface as CarPlay's own touchpad. One finger scrolls, a tap selects
-    (*Tap touchpad as click*), sensitivity Low / Medium / High, and *Two fingers tap to back* (two-finger slides also move the
-    focus).
-  - **Rotation as zoom**: turning the knob zooms the map (Apple Maps; Google Maps ignores it).
-- **CarPlay directions in HUD** and **HUD effects** (below).
-- **Restart to apply**: most switches take effect after a restart of the head unit; this does it from the menu.
-- A **safe mode**: after three failed boots in a row with the plugin, nothing is applied until you choose Restart to apply; three more
-  disable the plugin.
+The intended platform scope includes F54, F55, F56, F57 and F60. Findings from one vehicle should be recorded with its configuration and software identifiers; they should not silently be treated as proof for every software combination.
 
-The menu:
+## Scope boundaries
 
-```
-Media/Radio > CarPlay Advanced Settings
-  Full-screen CarPlay
-  CarPlay directions in HUD
-  HUD effects >        Fill toward the turn / Blink near the turn / Effect colour > (Orange, Grey, White) / HUD debug log
-  iDrive control >     Enable knob tilts
-                       Touchpad >   Enable touchpad / Tap touchpad as click / Touchpad sensitivity > (Low, Medium, High)
-                                    / Two fingers tap to back
-                       Enable rotation as zoom
-  Restart to apply
-```
+### In scope
 
-On iDrive 6 the HMI already does full screen, knob tilts and the touchpad (when the car is coded for it), so there the installer
-puts on the turn-by-turn part by default (`--hud`), with a **HUD-only menu** in the same place in Media/Radio:
+- MINI F5x: F54, F55, F56, F57 and F60.
+- Factory 6WB digital instrument cluster.
+- NBT Evo / iDrive 5 and iDrive 6 software relevant to the target vehicles.
+- CarPlay route guidance and its presentation on the 6WB instrument cluster.
+- Reverse engineering, protocol analysis, offline simulation, host-side tests and controlled hardware experiments.
 
-```
-Media/Radio > CarPlay Advanced Settings
-  CarPlay directions in HUD
-  HUD effects >        Fill toward the turn / Blink near the turn / Effect colour > (Orange, Grey, White) / HUD debug log
-```
+### Out of scope
 
-It changes nothing in the HMI itself, and its switches apply at the next CarPlay connection (no restart). The HMI shows it only when the
-car is coded for apps (A4A); without that the directions still work, with their default settings. `--full` installs the whole menu
-instead (not tried on iDrive 6 in a car).
+- A separate windscreen-projection HUD: no windscreen HUD rendering, HUD effects, HUD layout work or HUD feature development.
+- G-series and J29 Ethernet KOMBI implementations.
+- 6WA cluster development.
+- Claims of universal compatibility without configuration-specific evidence.
 
-### On iDrive 5 and 6: CarPlay turn-by-turn in the cluster and the HUD
+## Terminology: 6WB instrument cluster and legacy HUD names
 
-The plugin reads the guidance the iPhone sends to the car (the maneuver, the distance, the street, the lanes) and shows it where the
-BMW navigation would. How it gets there depends on the car's cluster; the installer finds out which one the car has.
+The upstream source uses names such as `hud.h`, `rghud.cpp`, `HUDTerminal`, `hud_guidance` and `librghook-most.so`. These are inherited implementation and MOST/DSI terminology.
 
-| | F-series (MOST cluster, e.g. MINI F54/F55/F56, BMW F30/F31 digital cluster) | G-series and J29 (Ethernet KOMBI) |
-|---|---|---|
-| Who draws | **We do.** The plugin draws every picture itself, polygon by polygon, on the cluster's `HUDTerminal` over MOST. | **The car does.** The plugin sends the route data to the KOMBI's own guidance service (SOME/IP), and the cluster and the HUD draw it with their own graphics. |
-| Pictures | Mapbox's maneuver and lane drawings, turned into HUD polygons (previews below). | The car's own arrows, distance and lane row. |
-| Status | **Tested in a car.** MINI F54 (HMI 1703): pictures, distance, street, HUD effects, lanes. BMW F30/F31 digital cluster (NBT Evo ID5, PR #13): arrow and distance with the `hud_box` / `hud_hide` switches set by hand (its picture buffer is 126×77 and it shows its own distance bar); the plugin now fits the box and hides the bar itself (not yet tried there). | **Not tested in a car.** A port of NBT-AAD's car-verified KOMBI stack (see Credits), checked against a fake KOMBI only. |
+**In this fork, the target is the 6WB instrument cluster — not a separate windscreen HUD.** A legacy source filename or protocol label does not redefine the project scope.
 
-**On the MOST cluster** the plugin takes the cluster's own handles from the BMW navigation's set-up at start (they differ between
-clusters: an F25 X3 has its texts elsewhere than a MINI), asks the cluster how big its picture area is and fits the arrow into it,
-and also draws on a second HUDTerminal (82/02) when the navigation uses one. Distances keep their decimal point ("1.5 km"). Seen in
-a car so far only on the MINI F54 (the F30/F31 and F25 worked with the same settings made by hand); for other clusters the settings files `hud_box`, `hud_hide`, `hud_inst` and `hud_text_handles`
-(AGENTS.md) set things by hand, and `sh carplay-advanced.sh hud-probe` shows what the cluster has.
+The inherited `src/hud.h` contains comments describing a 6WB-oriented display layout, including a 221 × 158 image plane and associated handles, with references to external research. Treat these details as research leads until they are independently confirmed against the intended F5x hardware and factory behaviour.
 
-**On the KOMBI** the street is shortened to 22 characters (the windscreen HUD cuts longer names off), a highway exit shows its
-number ("Exit 23B  I-95 N"), and a maneuver without a distance shows "0 m".
+## Inherited implementation: current status
 
-**HUD effects** (MOST, menu *HUD effects*): the maneuver fills up with the effect colour toward the turn and / or blinks near it. The
-start marker never fills or blinks.
+The starting codebase is the upstream CarPlay Advanced project. It currently contains more than the target research path, including:
 
-The pictures as the plugin draws them (white = the way to go, grey = context). They are built by the plugin's own code from
-[Mapbox's drawings](https://github.com/mapbox/mapbox-navigation-ios/tree/v0.40.0/MapboxNavigation) (ISC licence, see NOTICE):
+- The NBT Evo HMI plugin and CarPlay Advanced Settings menu.
+- iAP2 route-guidance interception and decoding in `src/rghook.c`.
+- A MOST/DSI drawing implementation in `src/hud.h` and `src/rghud.cpp`.
+- An Ethernet KOMBI implementation in `src/kombi.h` and `src/rgkombi.cpp`, intended for other vehicle platforms.
+- Controller, touchpad, zoom, full-screen layout, installer and restart functionality.
 
-![Maneuver pictures](docs/hud-maneuvers.svg)
+These components are inherited baseline code, not a statement that every feature is part of the F5x/6WB target. In particular, the Ethernet KOMBI path is outside this fork's scope. The existing source and prebuilt `plugin/` payload must be audited before producing or using a target-specific build. **This repository must not yet be described as a HUD-stripped or 6WB-validated installer.**
 
-![Lane strips](docs/hud-lanes.svg)
+## Research and verification standards
 
-The BMW navigation always wins: while it guides, the CarPlay directions step aside.
+Every result should state what kind of evidence supports it:
 
-## Supported software
-
-The menu plugin patches the HMI's code in memory at fixed addresses, so it supports exact software builds, recognised by file
-hashes:
-
-| HMI | Build | |
-|---|---|---|
-| 006_006_006 | ID5_1703-490-1650ZD Build 139 (MINI F54, 8.8") | tested in a car |
-| 006_017_006 | ID5_1803-510-1749MA Build 71 | not tried in a car yet |
-| NBTevo_ID5_1607_Release | ID5_1607-490-1610T Build 153 (BMW F20) | mapped by a contributor from a car's HMI; no Full-screen CarPlay; not tried in a car yet |
-
-Before it changes anything, the installer reads the head unit's HMI and CarPlay library and compares their hashes with the list
-above. On other iDrive 5 software it **searches the HMI for the places the plugin uses** (about 20 s on your computer). If it finds
-all of them, it says that this HMI is not supported yet and asks whether to install with the addresses it found (untested on that
-build; the plugin still checks every word before it changes it, so a wrong address changes nothing). Either way it prints a link
-that opens a GitHub issue with the hashes and the addresses it found: that is all that is needed to add the build to the list. If
-the search does not find everything, it stops with nothing changed. The turn-by-turn-only install (`--hud`) patches no HMI code
-and does not need a known build. The installer also checks `mm-ipod` (the iPhone driver the directions hook into) by hash in every
-mode: an unknown one only gets a note, since the hook works on the iPhone's messages rather than on addresses in it.
-
-> **NBT-AAD.** This plugin has **not been tested together with [NBT-AAD](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto)**
-> (Android Auto for the NBT Evo). Both are HMI plugins that use the same cluster channels (the MOST `HUDTerminal`, the KOMBI guidance
-> service) and similar hooks, so they may conflict. If you run both, please let me know how it goes:
-> [open an issue](https://github.com/st1ng/nbtevo-carplay-advanced/issues/new).
-
-## Prerequisites
-
-- **SSH access on the head unit.** The NBT Evo's SSH server (root login over ENET, `169.254.199.99`) must be enabled; on most units
-  it is not by default. The installer does everything over that connection.
-- **For the menu: the car coded with A4A** (apps), so the HMI loads app plugins such as this menu. CarPlay itself activated and
-  working.
-- A **Mac or Linux computer** with `ssh` (OpenSSH), an **ENET cable** (OBD to Ethernet), and the ignition on (the head unit
-  running). macOS gives the cable a link-local `169.254.x.x` address by itself; on Linux set that wired connection's IPv4 method
-  to "Link-Local Only" (`nmcli connection modify <name> ipv4.method link-local`).
-
-## Install
-
-From this folder (the installer uploads `plugin/` next to it), the installer logs in over SSH, checks the head unit, shows what it
-will do and asks before changing anything:
-
-```bash
-sh carplay-advanced.sh install
-```
-
-It then:
-
-1. checks the plugin files, and that the head unit answers;
-2. reads the HMI; for the full plugin on iDrive 5 it identifies the software by hash and searches it for the places the plugin uses
-   (an unknown build where the search finds everything asks first; otherwise it stops here, with nothing changed);
-3. asks **Proceed?**, copies every file it may replace to `BACKUP/` on your computer *before* it uploads anything, then uploads the
-   plugin and backs those files up on the head unit too (copied to `BACKUP/` as well afterwards);
-4. installs, prints a summary of what is on the head unit now, and offers to **restart** it.
-
-After the restart: **Media/Radio > CarPlay Advanced Settings**. On a first install all options are off; a reinstall keeps them.
-
-Other commands:
-
-```bash
-sh carplay-advanced.sh install --dry-run      # every check and the plan, nothing changed
-sh carplay-advanced.sh status                 # what is installed, the links, the backups
-sh carplay-advanced.sh uninstall              # back to the original state (--keep-config keeps your switches)
-sh carplay-advanced.sh restart                # restart the head unit
-sh carplay-advanced.sh hud-probe              # HUD shows nothing? asks the cluster and the HUD what they have (~40 s, changes
-                                              # nothing; needs "CarPlay directions in HUD" on), then shows five test pictures
-                                              # and asks which ones you see; saved in BACKUP/ for an issue
-```
-
-Options: `--hud` / `--full` (turn-by-turn only, or everything), `--cluster most|kombi|both` (where the directions go, instead of
-what the installer detects), `--yes` (no questions), `--host user@address`, `--help`.
-
-What changes on the head unit: the plugin folder, the settings folder, and **one line** in the boot script (removed again by
-uninstall). Everything else happens at run time and is gone after a restart once the plugin is removed.
-
-## How it works
-
-The short version. [AGENTS.md](AGENTS.md) has everything: every hook, address, file format and finding from the car.
-
-- **The menu** is an HMI plugin (`libCarPlayMenu.so`), the same kind the HMI uses for its own apps. When the HMI starts, the plugin
-  patches the HMI's code in memory (every word is checked first), shadows a few system files with path-manager links (a reboot
-  forgets them), and hooks the controller and touchpad input.
-- **Full-screen CarPlay** widens the CarPlay slot in the HMI's layout (MINI's own layout, or the common one BMW uses; on
-  006_017_006 BMW the HMI's own full-screen layout is switched on) and tells the iPhone the larger screen size.
-- **Knob and touchpad** reach CarPlay as real CarPlay input devices: `libcppinch.so`, preloaded into the head unit's Connectivity
-  process, adds directions to the knob and turns rotation into a pinch on a hidden touchscreen.
-- **Directions**: `librghook.so`, preloaded into the iPod/CarPlay process, decodes the iPhone's iAP2 route guidance. The plugin draws
-  it on the MOST `HUDTerminal`, or `librghook-kombi.so` sends it to the Ethernet KOMBI.
-
-## Build and test
-
-```bash
-./build.sh                                    # plugin/: the ARMv7 QNX libraries and the menu texts
-python3 -m unittest discover -s tests         # the tests (macOS / Linux, needs clang)
-python3 tools/hud_previews.py                 # docs/hud-*.svg, after a change to the pictures
-```
-
-Building needs only `clang` and `ld.lld`, and no BMW files: the libraries link against empty stand-ins that carry only the names of
-the head unit's libraries. `plugin/` is committed prebuilt, so installing needs no build.
-
-The tests run the real code on the computer: the menu's file patches, the HUD pictures, the iAP2 decoder, the KOMBI client against a
-fake KOMBI, and the installer against a simulated head unit (its shell, file system and tools).
-
-| Folder | What |
+| Evidence class | Meaning |
 |---|---|
-| `src/` | The plugin and its libraries (C / freestanding C++) |
-| `plugin/` | The built plugin: what the installer uploads |
-| `tests/` | Unit tests |
-| `tools/` | The HUD picture generator (from Mapbox's drawings), the previews, and two scripts for the head unit: `hud_probe.sh` (probes the cluster's HUD) and `hud_sim.sh` (a pretend route, to see the HUD effects without driving) |
-| `docs/` | The HUD previews |
-| `.claude/skills/` | Skills for AI coding agents (below) |
+| Documented | Supported by an identifiable manual, specification or technical reference. |
+| Source-derived | Established by analysis of source code, binaries or captured implementation data. |
+| Simulated | Exercised using host-side code, a model or a test double. |
+| Bench-verified | Reproduced on controlled hardware outside normal vehicle operation. |
+| Vehicle-verified | Observed on a real vehicle with its configuration and test evidence recorded. |
 
-### Skills for AI agents
+A successful compilation, source comment, third-party report or host-side test is not vehicle verification. Test reports should include the vehicle/chassis, cluster, NBT Evo and HMI software identifiers, coding assumptions, reproduction steps, expected and actual results, sanitized logs and relevant hashes.
 
-Much of this project was built with an AI coding agent ([Claude Code](https://claude.com/claude-code)). `AGENTS.md` is written for
-such agents as much as for people, and `.claude/skills/` holds two task guides that an agent loads when the task comes up:
+Never publish VINs, credentials, Wi-Fi passwords, Bluetooth identifiers, personal route data or other private vehicle information.
 
-- **`hmi-menu`**: adding, moving or removing menu rows. The menu lives in three files that must agree (the XML, the texts and the
-  handlers); its `check_menu.py` checks that they do.
-- **`hud-glyphs`**: the HUD pictures: regenerating them from Mapbox's drawings, changing the procedural ones (roundabouts, lanes,
-  digits), the piece budget, and `preview.py`, which renders any picture to SVG exactly as the head unit builds it.
+## Repository layout
 
-## Credits
+| Path | Purpose |
+|---|---|
+| `src/cpm.cpp` | NBT Evo HMI plugin and settings menu. |
+| `src/rghook.c` | iAP2 route-guidance interception and decoding. |
+| `src/rgview.h` | Shared route-guidance state interface. |
+| `src/hud.h` | Inherited MOST/DSI drawing implementation; legacy filename, not a windscreen-HUD project objective. |
+| `src/hudhandles.h` | MOST display-handle discovery and stored handle information. |
+| `src/rghud.cpp` | Inherited MOST route-guidance sender. |
+| `src/kombi.h`, `src/rgkombi.cpp`, `src/kombitemplate.h` | Inherited Ethernet KOMBI implementation; outside the F5x/6WB target. |
+| `src/pinch.c`, `src/pbwpatch.h`, `src/iniwide.h` | Inherited controller, layout and CarPlay input functionality. |
+| `plugin/` | Inherited prebuilt plugin payload; not automatically a target-specific release. |
+| `tests/` | Host-side tests and simulated integration checks. |
+| `tools/` | Build, inspection and development utilities. |
+| `AGENTS.md` | Detailed inherited architecture notes and development constraints. |
 
-- **[NBT-AAD](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto)** by nanaisu: Android Auto for the NBT Evo. This project stands on
-  their reverse engineering: the HMI plugin interface, the MOST/DSI client and the HUD terminal layout, and the Ethernet KOMBI
-  route-guidance stack, which `src/kombi.h` ports (with their captured route graph, `src/kombitemplate.h`, unchanged). Thank you.
-- **[NBT-AAD USB Tools](https://github.com/Yalozo/nbt-aad-usb-tools)** by Yalozo: the installer's pre-installation checks follow
-  theirs.
-- **[Mapbox Navigation SDK for iOS](https://github.com/mapbox/mapbox-navigation-ios)** v0.40.0: the maneuver and lane drawings
-  (ISC licence), turned into HUD polygons by `tools/hud_glyphs.py`.
-- [ftojke/BMW-iDrive6-CarPlay-HUD](https://github.com/ftojke/BMW-iDrive6-CarPlay-HUD),
-  [JayJay3071/nbt-android-auto](https://github.com/JayJay3071/nbt-android-auto),
-  [luka-dev/mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi) and [f-io/LIVI](https://github.com/f-io/LIVI):
-  findings and formats that helped (AGENTS.md, References).
-- **Contributors**: [ghackt](https://github.com/ghackt) (the 1.2.x fixes from the issues, ported into 1.3.0: the 1607 build, the
-  exit number, the start marker after a reroute, the KOMBI street length, the second `--hud` install, the restart after install),
-  [FreZZZeR](https://github.com/FreZZZeR) (`hud_box` / `hud_hide`, PR #13), and the owners who tested in their cars and sent logs,
-  handle maps and files: cfrogjump (F25), mrmilankd (F31), judirado-byte (F32), Barlows (F20), itstheodor (F36), tangshijiao and
-  Sir-Gordon (6WB), ONSS12.
+## Build and host-side tests
 
-## Feedback
+The inherited project provides these commands:
 
-Tried it on another car or another software build, found a bug, or run it next to NBT-AAD? Please
-[open an issue](https://github.com/st1ng/nbtevo-carplay-advanced/issues/new).
+```sh
+./build.sh
+python3 -m unittest discover -s tests
+```
 
-## License
+They build the current source and run the available host-side tests. They do not install software on a head unit and do not establish compatibility with a particular F5x/6WB vehicle.
 
-[PolyForm Noncommercial 1.0.0](LICENSE), the installer included: free for personal, hobby, research and educational use, not for
-commercial use. The exceptions are Mapbox's drawings (`src/hudglyphs.h` and the previews in `docs/`, ISC) and the files from NBT-AAD
-(PolyForm Noncommercial, with their notice). Details in [NOTICE](NOTICE).
+## Vehicle testing and safety
 
-Not affiliated with BMW, MINI, Apple or Harman. BMW, MINI, iDrive and CarPlay are trademarks of their owners. For educational
-purposes only, on your own car and at your own risk (see the disclaimer at the top): it changes how your head unit runs, though
-everything it changes can be undone with `uninstall`.
+Do not install this research fork on a vehicle merely because an installer is present. Before any vehicle test:
+
+1. Review the exact code and payload being tested.
+2. Record the vehicle, cluster and head-unit software configuration.
+3. Confirm that the test exercises only the intended 6WB cluster path.
+4. Prepare and verify a recovery procedure.
+5. Obtain explicit approval from the vehicle owner.
+
+Never experiment while driving. The project is provided without warranty; anyone performing a vehicle or head-unit modification is responsible for the consequences.
+
+## Upstream and acknowledgements
+
+This fork is based on **[st1ng/nbtevo-carplay-advanced](https://github.com/st1ng/nbtevo-carplay-advanced)**. The upstream project and its contributors provided the original NBT Evo plugin, installer, reverse-engineering work, tests and documentation.
+
+The inherited code also contains work or references from:
+
+- [NBT-AAD / Supra iDrive 6 Android Auto](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto)
+- [NBT-AAD USB Tools](https://github.com/Yalozo/nbt-aad-usb-tools)
+- [Mapbox Navigation SDK for iOS](https://github.com/mapbox/mapbox-navigation-ios)
+- [BMW iDrive 6 CarPlay HUD](https://github.com/ftojke/BMW-iDrive6-CarPlay-HUD)
+- [nbt-android-auto](https://github.com/JayJay3071/nbt-android-auto)
+- [mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)
+- [LIVI](https://github.com/f-io/LIVI)
+
+Preserve all upstream and third-party notices when modifying or redistributing inherited material. See [NOTICE](NOTICE) and [LICENSE](LICENSE) for the applicable terms.
+
+## Contributing
+
+Issues and pull requests are welcome when they advance the F5x/6WB research scope. Include the exact vehicle and software configuration, a concise reproduction procedure, the evidence class, and sanitized logs or captures where possible.
+
+Separate confirmed observations from hypotheses. Do not submit personal data, credentials, VINs or unredacted vehicle captures.
+
+## License and disclaimer
+
+This fork retains the licensing and third-party notices inherited from upstream. Review [LICENSE](LICENSE) and [NOTICE](NOTICE) before using, modifying or redistributing any part of the repository.
+
+This is an independent, non-commercial research fork. It is not affiliated with BMW, MINI, Apple or Harman. BMW, MINI, NBT Evo, iDrive and CarPlay are trademarks of their respective owners.
