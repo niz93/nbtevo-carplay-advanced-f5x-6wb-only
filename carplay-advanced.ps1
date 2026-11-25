@@ -37,7 +37,7 @@ Windows CarPlay Advanced / PowerShell 5.1 (experimental client)
   status/install/uninstall require noninteractive SSH key/agent authentication.
   --full | --hud       default full for ID5, hud for ID6
   --cluster most|kombi|both
-  --hud-tx 0|4          set MOST HUDTerminal DSI transmissionType (4 experimental, based on external F60 evidence)
+  --hud-tx 0|4          set MOST HUDTerminal DSI transmissionType (4 experimental; F56 visible result, C04/TX=0 A/B unverified)
   --dry-run            check remote QNX install plan without committing
   --yes                skip the Windows confirmation prompt
   --restart-hmi        restart HU after a successful install/uninstall

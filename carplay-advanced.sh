@@ -441,7 +441,7 @@ Usage: sh carplay-advanced.sh install|uninstall|status|restart|hud-probe [option
   --cluster most|kombi|both
                         Where CarPlay directions go, instead of what the probe finds: most = the MOST HUDTerminal (F-series),
                         kombi = the Ethernet KOMBI (G-series, J29), both = the two (a car with a KOMBI and a MOST HUDTerminal)
-  --hud-tx 0|4           Set MOST HUDTerminal DSI transmissionType (0 default; 4 experimental, based on external F60 evidence)
+  --hud-tx 0|4           Set MOST HUDTerminal DSI transmissionType (0 default; 4 experimental; F56 visible result, protocol gaps remain)
   --help                Show this help
 
 The computer detects the generation from HmiMain3D: iDrive 6 has the native CarPlay knob-tilt handlers, iDrive 5 does not.

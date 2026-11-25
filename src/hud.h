@@ -137,7 +137,7 @@ volatile int g_learnt[2];
 // CarPlaySetNightMode, CD7), as it passes; Vehicle 05/00 DayNight_ChangeOver (C31) is only logged (its values are not known).
 volatile int g_night = -1;
 volatile u32 g_dnLogged;
-// Optional HUDTerminal DSI transmissionType override (hud_tx switch): default 0; 4 is an experimental opt-in based on an external MINI F60 report, not validated on F56.
+// Optional HUDTerminal DSI transmissionType override (hud_tx switch): default 0; 4 is experimental; visible F56 guidance was observed on 2026-11-25, but C04 sizing and TX=0 A/B remain unverified.
 u32 g_hudTxType;
 
 u32 nowMs() {
@@ -754,7 +754,7 @@ bool send(u16 dst, u8 fb, u8 inst, u16 fkt, u8 op, const u8 *d, u32 n, u32 txTyp
     return false;
   Buf p;
   p.u32_(g_client);
-  p.u32_(txType);  // DSI transmissionType: 0 default; 4 experimental opt-in (external F60 evidence only)
+  p.u32_(txType);  // DSI transmissionType: 0 default; 4 experimental opt-in (F60 external clue; F56 visible result, protocol gaps remain)
   p.u32_(1);       // variantTag = eTransmissionTXControl
   p.u32_(0);       // variantValue stays 0; it is not the transmissionType selector
   p.u16_(dst);
