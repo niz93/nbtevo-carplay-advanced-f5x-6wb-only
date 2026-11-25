@@ -1,0 +1,141 @@
+{
+  "schema": "mini-f5x-public-evidence-index.v1",
+  "date": "2026-11-25",
+  "original_capture_set": {
+    "status": "VERIFIED_LOCAL_15_OF_15",
+    "manifest_sha256": "a286fbb5c9e911acbfe1fca848b3b7ac35c769fa269f161e0ecb704404e54409",
+    "files": [
+      {
+        "name": "mini-f56-native-nav-20261125-040320-116770.txt",
+        "size_bytes": 21371,
+        "sha256": "e59ff22d45efc63548828ec82f0b5eadd8ccfbfbfed440c17643bbfd3917bcaa"
+      },
+      {
+        "name": "hud-probe-v1.3.0-20261125-042222-571911.txt",
+        "size_bytes": 18344,
+        "sha256": "2599ee0b177bdfba728c86a9a0bf1b4ca3383c3342e218c8ca8c29ad1ee0b17e"
+      },
+      {
+        "name": "hud-probe-v1.3.0-20261125-041729-717486.txt",
+        "size_bytes": 18246,
+        "sha256": "027109ec89076a8494111b9d20c616beccf503ad7a8f35caa0bfde8c14a1f9e8"
+      },
+      {
+        "name": "hud-probe-v1.3.0-20261125-032957-438623(1).txt",
+        "size_bytes": 17799,
+        "sha256": "f4aef6def0c4fc38bee0d5c8a2b248d71bbc0fa60f0e8c552d913ffc08cf2a81"
+      },
+      {
+        "name": "hud-probe-v1.3.0-20261125-022702-742517.txt",
+        "size_bytes": 17926,
+        "sha256": "53abe6d7cb0b713fa660935f88793d61539a023a69f87d556a855f10441695ce"
+      },
+      {
+        "name": "20261125-041639.log",
+        "size_bytes": 8243,
+        "sha256": "71228b320356c1d190944968280ac3c82eba7378ebe51c34a3d19492d5046133"
+      },
+      {
+        "name": "20261125-040102.log",
+        "size_bytes": 24950,
+        "sha256": "d812e45de88ca6d6dcfaa36ee68619fd21e009f5ca9fab78a6765c28dd1ac792"
+      },
+      {
+        "name": "20261125-032743.log",
+        "size_bytes": 4781,
+        "sha256": "1f28b4caeda25d3bae765b896adaa13c49f13ecdc8cd1e7cc045e277adf634f5"
+      },
+      {
+        "name": "20261125-022521.log",
+        "size_bytes": 4978,
+        "sha256": "686304be567f8dcd65f80983ae48a7a974c9f4b7471f251b20703e7acff25f81"
+      },
+      {
+        "name": "20261125-011847.log",
+        "size_bytes": 16015,
+        "sha256": "85c3cabe59ba9453b95b6a43ab9a52d72e0e00dc54d379b240eb795642bf0225"
+      },
+      {
+        "name": "20261125-011741.log",
+        "size_bytes": 847,
+        "sha256": "ed01980c48d68ebff04478dc0e6729b075a34c2a070b50f26e04465142310ff1"
+      },
+      {
+        "name": "20261123-024844.log",
+        "size_bytes": 712,
+        "sha256": "fa99f20939da5e1ed430236e4e13c764043a37211d9e23647c6eead4127cc3aa"
+      },
+      {
+        "name": "20261123-024405.log",
+        "size_bytes": 1316,
+        "sha256": "f00c00123030cc9a09e3d9a82dd5f9d276d296bd88d921fbcbc5caacb2a7f2c8"
+      },
+      {
+        "name": "20261123-023630.log",
+        "size_bytes": 710,
+        "sha256": "2128aebefa671a76323249fee5f2c503012a381ed04923b394f4f5084a208da5"
+      },
+      {
+        "name": "20261123-022145.log",
+        "size_bytes": 950,
+        "sha256": "d67cf775248616592901b0993a83ea420f6ee33205b4faedc320c1a575a3a7bb"
+      }
+    ]
+  },
+  "latest_vehicle_capture": {
+    "files": [
+      {
+        "name": "capture.json",
+        "sha256": "87da2b10b8335df0f02e80fb66a8bacfdf20c6ac1542c91aa48df62fdc0867e8",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "cluster.txt",
+        "sha256": "da0e5f934d8b2a4335855de9555b62fcb43ad134e82c1711db3437244286564f",
+        "status": "NOT_RECOVERED"
+      },
+      {
+        "name": "hmi-version.txt",
+        "sha256": "44259096530cbc2ab8f333a7600d7e76b77a2aea7401d25c51636f645881d0ec",
+        "status": "NOT_RECOVERED"
+      },
+      {
+        "name": "hud_guidance.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": "EMPTY_HASH_RECORDED; ORIGINAL_NOT_RECOVERED"
+      },
+      {
+        "name": "hud_tx.txt",
+        "sha256": "7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d",
+        "status": "NOT_RECOVERED"
+      },
+      {
+        "name": "rghook-after.log",
+        "sha256": "b04f60428582c61b2d526b3cf0d8e903bdbc08ca1d9ace510644ec46c057ec2c",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "rghook-before.log",
+        "sha256": "aaf672561f7a9640fe2e8ceb3793ac848e48c677275f75827f78341b6a823e9a",
+        "status": "VERIFIED"
+      },
+      {
+        "name": "rghook-new.log",
+        "sha256": "9f06be7de336f4ab59eb1a0686048e9f62cc5a6bca20881275a57b01bebd1a9e",
+        "status": "VERIFIED"
+      }
+    ],
+    "note": "Original SHA256SUMS listing recovered from conversation; non-empty files verified against its expected hashes. Raw archives remain local and are not staged for public release."
+  },
+  "github_audit": {
+    "records": 362,
+    "issues": 250,
+    "pull_requests": 112,
+    "discussion_threads_reviewed": 10,
+    "pr_diffs_reviewed": 9,
+    "source_manifest_sha256": "62be72bb0bf1b2fd3d0f0b34990727268d4b42271d84a0be9056b7e2a3f5a376",
+    "registry_sha256": "201ecc1e479f5fe4f675e77ea6f9dc2a7576ab495296f182abd1882d194d46ee",
+    "integrity": "22/23; verify_issue38_alignment.py differs from recorded hash",
+    "status": "RECORD_LEVEL_COMPLETE; DISCUSSION_AND_DIFF_REVIEW_PARTIAL"
+  }
+}

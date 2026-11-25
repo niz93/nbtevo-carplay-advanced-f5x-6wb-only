@@ -155,15 +155,15 @@ The historical capture name is mini-f56-native-nav-20261125-040320-116770.txt. I
 
 The observed handles include 1–8 and 0x16; drawing uses handles 5, 6 and 7. The capture does not include 0x200 CreateInstance, 0x22B FrameAddItem or 0xC04 ImageGetSize in that window. The header's handle map was retained from an earlier start, not learned in the captured 60 seconds. The returned log excludes the 0x210 street-text payloads. This is useful OEM drawing/visibility evidence, not a complete setup or allocator-lifecycle capture.
 
-**Repository evidence gap:** the raw capture is referenced by name in prior project research, but the evidence/original-captures-2026-11-25/ directory and EVIDENCE-MANIFEST.json are not present in this local checkout. The raw bytes and original SHA-256 values must be re-imported before claiming that the capture archive is preserved or independently re-auditable here.
+**Evidence restoration:** the original 15-file capture set and its original manifest were located on both PCs and reverified on Zenbook (15/15 SHA-256 and byte sizes). Raw vehicle logs remain in the local research archive; see [evidence index](EVIDENCE-MANIFEST.json) for public provenance.
 
 ### 9. Earlier F56 HUD Probe reports
 
 **Result — VEHICLE-OBSERVED; CAUSE UNKNOWN**
 
-Two historical F56 reports (hud-probe-v1.3.0-20261125-041729-717486.txt and hud-probe-v1.3.0-20261125-042222-571911.txt) each recorded 128 C04 ImageGetSize requests and 128 ErrorAck 0x41 responses across handles 0x01–0x40 and two tested payload forms.
+Two of the four historical F56 reports (hud-probe-v1.3.0-20261125-041729-717486.txt and hud-probe-v1.3.0-20261125-042222-571911.txt) each recorded 128 C04 ImageGetSize requests and 128 ErrorAck 0x41 responses across handles 0x01–0x40 and two tested payload forms.
 
-Neither report preserved the DSI transmissionType field. Their visual result was mini: cluster n. Therefore these reports prove that those particular C04 probes were refused; they do not identify whether TX=0 or TX=4 caused the refusal and do not prove visible rendering.
+Neither report preserved the DSI transmissionType field. Their visual result was mini: cluster n. The earlier two reports were also checked: each of all four reports contains 128 refused C04 requests (512/512 total). Therefore these reports prove that those particular C04 probes were refused; they do not identify whether TX=0 or TX=4 caused the refusal and do not prove visible rendering.
 
 ### 10. Later F56 TX=4 vehicle result
 
@@ -263,7 +263,7 @@ The earlier README assertion failure for the word transmissionType was corrected
 | F54 HMI 1703 input and CarPlay baseline | VEHICLE-OBSERVED | The documented F54 in-car behavior on that HMI build. |
 | F54 MOST HUDTerminal drawing and geometry | VEHICLE-OBSERVED | The recorded F54 handles, C04 form, surfaces, palette and polygon behavior. |
 | F56 passive OEM navigation capture | PARTIAL | OEM drawing/visibility traffic; no complete setup lifecycle in the captured window. |
-| F56 pre-TX4 C04 probes | ERROR OBSERVED / CAUSE UNKNOWN | 128/128 ErrorAck 0x41 in each of two reports; TX field not preserved. |
+| F56 pre-TX4 C04 probes | ERROR OBSERVED / CAUSE UNKNOWN | 128/128 ErrorAck 0x41 in each of four reports (512/512); TX field not preserved. |
 | F56 visible route guidance with TX=4 | VEHICLE-OBSERVED | Visible 170 m right-turn prompt and historical TX=4 log summary. |
 | F56 C04 positive size response / buffer dimensions | UNKNOWN | No positive response or measured dimensions in the available latest run summary. |
 | F56 TX=0 versus TX=4 controlled comparison | NOT RUN | No causal A/B result. |
@@ -273,22 +273,18 @@ The earlier README assertion failure for the word transmissionType was corrected
 | Ethernet KOMBI | HOST-TESTED ONLY | Fake KOMBI tests; no vehicle validation. |
 | spawn() alignment / SIGBUS | OPEN RISK | rgkombi.cpp pattern remains present in KOMBI/BOTH source. |
 | Current Zenbook ARMv7/QNX build | BLOCKED | Required LLVM/Git Bash toolchain is missing. |
-| Full GitHub Issues/PR audit | NOT COMPLETE | The requested 250 Issues / 112 PR review across three repositories is not represented as completed by this report. |
+| Full GitHub Issues/PR audit | RECORD-LEVEL COMPLETE; DEEP REVIEW PARTIAL | 362 records classified; 10 issue threads and 9 PR diffs inspected. Original audit manifest recheck 22/23. |
 
 ## Remaining research, in priority order
 
-1. **Restore raw evidence into this repository.** Import the F56 native capture, both F56 HUD Probe reports, the latest TX=4 vehicle log and its seven-file hash manifest. Add an immutable evidence manifest with source path, byte size, SHA-256, vehicle/HMI metadata and redaction notes. Do not invent missing hashes.
-2. **Run a controlled F56 TX=0 / TX=4 A/B.** Use the same vehicle, HMI, route, terminal and commands. Capture full DSI headers and timestamps for each request and response. Keep the result separate from the already observed TX=4 photo.
-3. **Resolve C04 and picture-buffer sizing.** Capture a positive ImageGetSize response, the exact request form, handle, width/height, response variant and timing. Establish whether the 120 × 72 MINI buffer is discovered at runtime or the renderer falls back to its default box.
-4. **Prove response correlation.** Determine whether any sequence/message identifier can causally pair an ImageGetSize request with its reply. Test delayed same-TX/same-handle replies, duplicate responses and timeouts.
-5. **Capture the complete native setup lifecycle.** Record 0x200 CreateInstance, 0x22B FrameAddItem, C04 queries, handle ownership and cleanup across cold start, HMI restart, navigation restart and route end.
-6. **Validate text and lane output on F56.** Include 0x210 payloads, street/distance/unit handles, Unicode/encoding cases, Mapbox lane glyphs and maneuver changes.
-7. **Investigate 82/02 independently.** Establish whether the tested F56 has a second KOMBI/HUD terminal, what it represents, and whether any output should be mirrored there. Do not infer this from 82/00.
-8. **Cross-vehicle validation.** Test F54/F55/F56/F57/F60 separately with exact HMI build, firmware, coding and equipment provenance. The shared physical panel rule is not a substitute for per-build evidence.
-9. **Close issue #38 before enabling KOMBI/BOTH builds for vehicle use.** Verify the actual QNX spawn() inheritance structure's alignment, add a compile-time or runtime alignment assertion, build all affected variants and test on a safe non-vehicle harness first. Keep HUD debug logging disabled on the car until this review is closed.
-10. **Complete the requested GitHub audit.** Review every applicable Issue and PR in st1ng/nbtevo-carplay-advanced, Sq00ky/Supra-iDrive6-Android-Auto and Yalozo/nbt-aad-usb-tools; record per-item applicability, code diff, risk, tests and disposition. Prioritize issue #38. This is still an outstanding audit, not a completed result.
-11. **Restore the reproducible Windows toolchain.** Provide LLVM clang/ld.lld and a supported Bash path on the Zenbook; add ksh only if the test plan requires it. Run the complete host suite and all nine ARMv7/QNX library builds, then record compiler versions, commands, exit codes and SHA-256 hashes.
-12. **Rebuild the plugin payload.** Compare each generated library against the checked-in plugin files. The current plugin/librghook-most.so SHA-256 is fc6bac8e65b1e0afe034d758265ec6af3943bb975c42460f077524eabc3fed3f, which differs from the historical F56-tested binary hash prefix d0e448…. Do not treat the current prebuilt payload as the tested TX=4 artifact.
+1. **P0 - Finish the existing repository audit.** 362 unique records (250 Issues and 112 PRs) classified; 10 issue discussions and nine PR diffs reviewed. Complete the remaining relevant thread/diff analysis before selecting implementation changes. The source audit manifest currently verifies 22/23 entries; the alignment verification helper has a hash mismatch. Preserve the original manifest and resolve this discrepancy.
+2. **P0 - Evidence preservation and restart stability.** The 15 original capture/log files and original manifest are present on the Zenbook research volume, with all sizes and SHA-256 values verified. The latest TX=4 capture metadata and three route logs have been recovered from the conversation and verified against their original SHA-256 listing. Resolve the remaining file gaps; use the existing passive-monitor research and avoid repeating accepted experiments.
+3. **P1 - Apply audit findings to the MINI cluster path.** Assess session cleanup, late C04 replies, navigation handover and restart lifecycle in the current source. The exact Issue #38 spawn() path is absent from the installed MOST DSO; keep its alignment risk on the separate KOMBI/BOTH regression track. The audit-only alignment experiment is not an installed fix.
+4. **P1 - Clarify C04, response correlation and geometry.** Establish the full native setup/lifecycle and distinguish valid measurement from fallback behavior. An A/B test is optional only if it adds evidence beyond the already observed TX=4 result; any vehicle test requires separate approval.
+5. **P2 - Validate text, Unicode, lanes and maneuver updates on MINI_F5X.** Record actual HMI versions and results; distinguish family-level assumptions from vehicle measurements.
+6. **P2 - Reproduce the Windows/QNX build and complete regression testing.** Reconcile the exact installed MOST binary with the source and preserve all inherited upstream backends.
+
+The separate HUD terminal 82/02 is outside the no-HUD target scope. Preserve upstream support; no independent HUD experiment or validation gate is required.
 
 ## Safety and release boundary
 

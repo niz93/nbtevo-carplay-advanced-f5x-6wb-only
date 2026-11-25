@@ -15,7 +15,7 @@ The project must keep BMW F-series **6WB** as a separate cluster/layout profile.
 
 ## Evidence status
 
-**Important repository correction:** this local checkout does not contain the raw evidence directory previously referenced in project notes. Neither evidence/original-captures-2026-11-25/ nor EVIDENCE-MANIFEST.json is present in this working tree. Capture names and summarized results below come from earlier project records; the raw capture bytes and original hashes must be re-imported before this clone can claim to preserve or independently re-audit them.
+**Evidence restoration:** the original 15-file capture set and its original manifest are preserved in the local Zenbook research archive and verified 15/15. Raw logs are not committed to the public repository. See [evidence index](EVIDENCE-MANIFEST.json).
 
 The current dossier distinguishes user-confirmed family information, real-vehicle observations, source-derived behavior, host simulations and unresolved assumptions.
 
@@ -131,12 +131,12 @@ See [MINI_6WB_TXCONTROL.md](MINI_6WB_TXCONTROL.md) for the DSI selector and C04 
 
 ## Remaining work
 
-1. Re-import the raw F54/F56 captures, probe reports, latest TX=4 log and SHA-256 manifest.
+1. Complete remaining latest TX=4 and F54 evidence gaps; the original F56 capture set (15/15) and four later capture files are already verified locally. See [evidence index](EVIDENCE-MANIFEST.json).
 2. Record exact vehicle/HMI/coding metadata for every capture.
 3. Run controlled F56 TX=0/TX=4 A/B with full DSI headers and timestamps.
 4. Obtain a positive F56 C04 response and record handle, dimensions, payload form and timing.
 5. Capture CreateInstance, FrameAddItem, C04 and cleanup across a complete native navigation lifecycle.
-6. Validate text, Unicode, distance/unit rendering, Mapbox lane glyphs and 82/02 separately.
+6. Validate text, Unicode, distance/unit rendering and Mapbox lane glyphs on the MINI instrument cluster. Separate HUD terminal 82/02 is outside scope.
 7. Repeat on F54/F55/F56/F57/F60 independently before claiming family-wide compatibility.
 8. Rebuild the exact tested plugin binary and verify its SHA-256 against the vehicle evidence.
 

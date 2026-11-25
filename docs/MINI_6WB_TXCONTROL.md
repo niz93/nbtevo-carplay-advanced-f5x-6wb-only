@@ -64,7 +64,7 @@ The later F56 test record from 2026-11-25 reports:
 - Seven of seven files in the historical evidence check passed SHA-256 verification.
 - A user photo shows the 170 m right-turn prompt on both the center CarPlay display and instrument cluster; a companion photo shows a 10 m left-turn prompt.
 
-The tested librghook-most.so was recorded with SHA-256 prefix d0e448… in the earlier evidence summary. The full archive and complete tested-binary hash are not in this checkout.
+The tested librghook-most.so was recorded with SHA-256 prefix d0e448… in the earlier evidence summary. The exact installed binary hash is now confirmed from the recovered capture.json; the full archive and tested binary are not in this checkout.
 
 The same run did not record a positive C04 ImageGetSize response, picture-buffer dimensions or a picture-buffer response trace. A standalone hud_guidance.txt was absent. hud_debug was not enabled. No controlled TX=0 comparison was performed.
 
@@ -103,7 +103,7 @@ A previous workcopy reported 71/71 selected Cygwin tests and nine ARMv7/QNX libr
 
 ## Required next experiments
 
-1. Re-import the original F56 capture, both HUD Probe reports, latest TX=4 log and seven-file SHA-256 manifest into a tracked evidence package.
+1. Complete the remaining latest TX=4 capture evidence gaps. The 15-file original capture set is already preserved and verified locally; four later files are verified. See [evidence index](EVIDENCE-MANIFEST.json).
 2. Run controlled TX=0 and TX=4 tests on the same F56, same HMI build, same route and same terminal.
 3. Capture complete DSI request/response headers, timestamps, endpoints, instance, function, opType, transmissionType, variant and payload.
 4. Obtain a positive C04 ImageGetSize response and record handle, width, height, payload form and response timing.

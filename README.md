@@ -98,20 +98,16 @@ The optional setting is **hud_tx**:
 
 The Windows installer exposes --hud-tx 0|4. The setting is read at plugin startup, so changing it for a running plugin requires the normal controlled restart process. Do not treat a dry-run as vehicle compatibility evidence.
 
-## What still needs research
+## Research priorities
 
-1. Import the original F56 captures, HUD Probe reports, TX=4 vehicle log and the seven-file SHA-256 evidence manifest into this checkout.
-2. Run a controlled F56 TX=0 versus TX=4 comparison with full DSI headers, timestamps and response capture.
-3. Obtain and verify a positive F56 C04 ImageGetSize response and picture-buffer dimensions.
-4. Prove request/response correlation, including delayed same-TX/same-handle replies.
-5. Capture the complete native CreateInstance / FrameAddItem / C04 handle lifecycle.
-6. Validate F56 text encoding, lane glyphs and any separate 82/02 terminal.
-7. Validate F54/F55/F56/F57/F60 separately with exact HMI and coding provenance.
-8. Resolve the spawn() alignment risk from st1ng issue #38 before enabling KOMBI/BOTH variants for vehicle use.
-9. Complete the requested full Issues/PR audit across st1ng, Sq00ky and Yalozo repositories.
-10. Restore LLVM clang/ld.lld and a supported Bash/ksh test environment on the Zenbook; rebuild and hash all ARMv7/QNX libraries.
+1. **P0: complete the existing GitHub audit.** All 362 issue/PR records (250 Issues, 112 PRs) are classified. Review the remaining relevant discussions and diffs; reconcile the one changed audit helper against its original manifest. Do not repeat the completed inventory.
+2. **P0: preserve evidence and establish restart stability.** The original 15-file capture set is verified locally. Four files from the later TX=4 capture have been recovered and hash-verified. The remaining capture files and audit integrity gap must be reconciled. See the [evidence index](docs/EVIDENCE-MANIFEST.json).
+3. **P1: prioritize MINI F5x without HUD.** Complete the source-level assessment of session cleanup, late replies and navigation handover proposals identified in the audit. Assess passive restart monitoring without enabling vehicle debug switches.
+4. **P1: clarify C04 and geometry.** Confirm the observed fallback behavior, response correlation and complete native navigation lifecycle with appropriate evidence.
+5. **P2: validate text, lane rendering and compatibility across F5x HMI versions.** Retain exact vehicle and software provenance.
+6. **P2: reproduce the build and regression suite, and reconcile the installed binary with the published source.** Preserve every inherited upstream capability.
 
-The full priority list and exact evidence boundaries are in the technical research dossier. The current checked-in plugin binaries are not the same as the historical F56-tested artifact; do not install them as if they were that test build.
+The separate HUD terminal 82/02 is out of scope for the MINI no-HUD research configuration; its upstream implementation is preserved. It is not a project acceptance requirement. No vehicle operation or change to the installed TX=4 configuration is authorized by this document.
 
 ## Inherited implementation
 
