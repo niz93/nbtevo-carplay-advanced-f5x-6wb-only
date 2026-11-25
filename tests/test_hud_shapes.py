@@ -55,13 +55,15 @@ ANGLES = range(-165, 181, 15)
 class HudShapes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not shutil.which('clang++'):
-            raise unittest.SkipTest('clang++ not found')
+        cxx = os.environ.get('CXX') or shutil.which('g++') or shutil.which('c++') or shutil.which('clang++')
+        if not cxx:
+            raise unittest.SkipTest('C++ compiler not found (set CXX)')
+        cls.cxx = cxx
         cls.tmp = tempfile.TemporaryDirectory(prefix='hudshapes-')
         d = Path(cls.tmp.name)
         (d / 'h.cpp').write_text(HARNESS)
         cls.exe = d / 'h'
-        subprocess.run(['clang++', '-std=c++11', '-Wall', '-Werror', '-I', str(ROOT / 'src'), '-o', str(cls.exe), str(d / 'h.cpp')],
+        subprocess.run([cxx, '-std=c++11', '-Wall', '-Werror', '-I', str(ROOT / 'src'), '-o', str(cls.exe), str(d / 'h.cpp')],
                        check=True)
 
     @classmethod
@@ -239,7 +241,7 @@ int main(int argc, char **argv) { printf("%d\n", hud::udiv(atoi(argv[1]), atoi(a
 '''
         d = Path(self.tmp.name)
         (d / 'div.cpp').write_text(src)
-        subprocess.run(['clang++', '-std=c++11', '-Wall', '-Werror', '-I', str(ROOT / 'src'), '-o', str(d / 'div'), str(d / 'div.cpp')],
+        subprocess.run([self.cxx, '-std=c++11', '-Wall', '-Werror', '-I', str(ROOT / 'src'), '-o', str(d / 'div'), str(d / 'div.cpp')],
                        check=True)
         run = lambda *a: int(subprocess.run([str(d / 'div')] + [str(x) for x in a], capture_output=True, text=True, check=True).stdout)  # noqa: E731
         for a, b in ((0, 7), (359, 40), (65535, 3), (65536, 3), (90112, 1020), (88 * 1024, 89), (2 ** 31 - 1, 1), (2 ** 31 - 1, 12345)):

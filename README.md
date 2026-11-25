@@ -1,3 +1,15 @@
+# MINI F5x research focus
+
+This fork is also used as a focused research workspace for the MINI F5x family (F54, F55, F56, F57 and F60) and its stock digital instrument panel. The goal is to investigate the CarPlay route-guidance path on that panel and develop small, evidence-backed changes that can later be proposed to [the upstream project](https://github.com/st1ng/nbtevo-carplay-advanced).
+
+This is a **research focus, not a reduction of upstream scope**. All inherited vehicle, cluster, MOST/DSI, Ethernet KOMBI, HUD and HUD-effects functionality is intentionally retained. Do not remove, disable, stub out or rewrite unrelated support paths merely because they are not the target of the current MINI F5x investigation. Changes should be minimal, isolated where practical, regression-tested, and suitable for review upstream.
+
+The user-confirmed shared-panel family (F54/F55/F56/F57/F60) does not make every HMI build, coding option or runtime behavior identical. Preserve per-vehicle and per-build provenance. In particular, the MINI F5x stock panel must not be confused with the separate BMW 6WB layout profile in the source.
+
+Experimental DSI transmissionType=4 support is **opt-in and not vehicle-validated on F56**. The default remains 0. The external MINI F60 report is a research clue, not proof that every F5x vehicle requires TX=4 or that route rendering works after a positive read-only C04 response. See [docs/MINI_6WB_TXCONTROL.md](docs/MINI_6WB_TXCONTROL.md) and [docs/MINI_F5X_CLUSTER_FAMILY.md](docs/MINI_F5X_CLUSTER_FAMILY.md).
+
+---
+
 # nbtevo-carplay-advanced
 
 Apple CarPlay add-ons for the BMW / MINI **NBT Evo** head unit (iDrive 5 and iDrive 6): a **CarPlay Advanced Settings** menu in

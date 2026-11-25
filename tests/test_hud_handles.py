@@ -1,5 +1,7 @@
 """src/hudhandles.h, built for the host: the HUDTerminal handles learnt from the BMW navigation's FrameAddItem answers.
-The first case is the MINI F54's own set-up, as the plugin logged it in the car on 2026-11-13."""
+The first case is the shared MINI F5x panel's set-up, captured on F54 on 2026-11-13; F54/F55/F56/F57/F60 are one panel family."""
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -30,8 +32,9 @@ int main() {
   }
 }
 '''
-# the F54's navigation: 22B answers in the order they came (frame 01 = layout Tf1, 0B = Tf2, 10 = Tf3)
-F54 = ['00 01 00 05 01 00 04', '00 01 00 06 01 00 04', '00 01 00 07 01 00 04', '00 01 00 08 01 00 04', '00 01 00 09 01 00 04',
+# Shared MINI F5x panel fixture; captured on F54 (frame 01 = layout Tf1, 0B = Tf2, 10 = Tf3).
+MINI_F5X_MODELS = ('F54', 'F55', 'F56', 'F57', 'F60')
+MINI_F5X = ['00 01 00 05 01 00 04', '00 01 00 06 01 00 04', '00 01 00 07 01 00 04', '00 01 00 08 01 00 04', '00 01 00 09 01 00 04',
        '00 01 00 0a 01 00 04', '00 01 00 02 01 00 03', '00 01 00 04 01 00 02', '00 01 00 03 01 00 05', '00 01 00 16 0f 00 06',
        '00 0b 00 0e 01 00 04', '00 0b 00 0f 01 00 04', '00 0b 00 0d 01 00 02', '00 0b 00 0c 01 00 05',
        '00 10 00 12 01 00 02', '00 10 00 11 01 00 05', '00 10 00 15 0f 00 06', '00 10 00 13 01 00 04', '00 10 00 14 01 00 04']
@@ -43,7 +46,10 @@ class HudHandlesTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         src = Path(cls.tmp.name) / 'h.cpp'; src.write_text(HARNESS)
         cls.exe = Path(cls.tmp.name) / 'h'
-        subprocess.run(['c++', '-std=c++11', '-I', str(SRC), '-o', str(cls.exe), str(src)], check=True)
+        cxx = os.environ.get('CXX') or shutil.which('clang++') or shutil.which('g++') or shutil.which('c++')
+        if not cxx:
+            raise unittest.SkipTest('C++ compiler not found (set CXX)')
+        subprocess.run([cxx, '-std=c++11', '-I', str(SRC), '-o', str(cls.exe), str(src)], check=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -53,13 +59,16 @@ class HudHandlesTest(unittest.TestCase):
         r = subprocess.run([str(self.exe)], input='\n'.join(lines) + '\n', capture_output=True, text=True, check=True)
         return r.stdout.splitlines()
 
-    def test_f54_set_up_gives_the_handles_hud_h_used_as_constants(self):
-        out = self.run_lines(['c 00 01 00 01'] + ['a ' + a for a in F54] + ['m'])
-        self.assertEqual(out.count('COMPLETE'), 1)
-        self.assertEqual(out.index('COMPLETE'), 0)                     # complete at the distance text, before the bargraph
-        self.assertEqual(out[-2:], ['MAP 1 1 2 3 4 5 6 22', 'FAMILY 1'])   # panel street distance unit picture A/B, bar 0x16
+    def test_f54_capture_fixture_is_reused_for_user_confirmed_f5x_family(self):
+        # F54 is the source capture vehicle; the other four model names intentionally use the same panel contract.
+        for model in MINI_F5X_MODELS:
+            with self.subTest(model=model):
+                out = self.run_lines(['c 00 01 00 01'] + ['a ' + a for a in MINI_F5X] + ['m'])
+                self.assertEqual(out.count('COMPLETE'), 1)
+                self.assertEqual(out.index('COMPLETE'), 0)                   # complete at the distance text, before the bargraph
+                self.assertEqual(out[-2:], ['MAP 1 1 2 3 4 5 6 22', 'FAMILY 1']) # shared panel handles, bar 0x16
 
-    def test_another_cluster_gets_its_own_handles(self):
+    def test_non_mini_f5x_cluster_gets_its_own_handles(self):
         # the same set-up on a cluster that numbers its instances otherwise, the unit before the street
         other = ['00 20 00 31 01 00 04', '00 20 00 32 01 00 04', '00 20 00 33 01 00 04', '00 20 00 41 01 00 02', '00 20 00 40 01 00 03',
                  '00 20 00 42 01 00 05', '00 20 00 50 0f 00 06', '00 21 00 60 01 00 04', '00 21 00 61 01 00 03']
@@ -67,11 +76,11 @@ class HudHandlesTest(unittest.TestCase):
         self.assertEqual(out[-2], 'MAP 1 32 64 66 65 49 50 80')
 
     def test_incomplete_frame_is_not_used(self):
-        out = self.run_lines(['a ' + a for a in F54[:8]] + ['m'])       # no distance text yet
+        out = self.run_lines(['a ' + a for a in MINI_F5X[:8]] + ['m'])       # no distance text yet
         self.assertNotIn('COMPLETE', out); self.assertTrue(out[-2].startswith('MAP 0 '))
 
     def test_a_new_set_up_starts_over(self):
-        out = self.run_lines(['a ' + a for a in F54] + ['c 00 02 00 0b', 'm', 'c 00 01 00 01', 'm'])
+        out = self.run_lines(['a ' + a for a in MINI_F5X] + ['c 00 02 00 0b', 'm', 'c 00 01 00 01', 'm'])
         self.assertEqual(out[-4], 'MAP 1 1 2 3 4 5 6 22')              # index 2: the same set-up goes on
         self.assertEqual(out[-2], 'MAP 0 0 0 0 0 0 0 0')               # index 1: everything again
 

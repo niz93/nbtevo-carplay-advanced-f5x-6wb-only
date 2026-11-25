@@ -3,9 +3,9 @@
 Only the absolute path constants of a temporary copy of the production script are redirected into a temporary directory. QNX-only
 tools (uname, pidin, on, mount, df, sync, OnOffDSICommander) and ssh are simulated; cp/mv/dd/diff/grep/ksh are the host's own.
 The ssh stand-in runs the remote command locally, as the head unit would (landing on hu-jacinto unless TEST_LAND says otherwise).
-Every test runs under /bin/sh and under ksh (the head unit's shell is a ksh).
+Every test runs under a POSIX shell and a Korn-compatible shell. CPA_SH / CPA_KSH may select host executables; Cygwin sh + mksh are used on Windows.
 """
-import hashlib, os, shlex, shutil, struct, subprocess, tempfile, unittest, urllib.parse, zipfile
+import hashlib, os, shlex, shutil, struct, subprocess, sys, tempfile, unittest, urllib.parse, zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
@@ -24,7 +24,9 @@ sha = lambda b: hashlib.sha256(b).hexdigest()
 TABLE = ['# software file sha256',
          'TEST_006 HmiMain3D %s' % sha(HMI_006), 'TEST_006 libconn_carplay.so %s' % sha(CONN),
          'TEST_1703 HmiMain3D %s' % sha(HMI_1703), 'TEST_1703 libconn_carplay.so %s' % sha(CONN)]
-SHELLS = [s for s in ('/bin/sh', shutil.which('ksh')) if s]
+POSIX_SHELL = os.environ.get('CPA_SH') or '/bin/sh'
+KORN_SHELL = os.environ.get('CPA_KSH') or shutil.which('ksh')
+SHELLS = [s for s in (POSIX_SHELL, KORN_SHELL) if s]
 
 
 def elf(tag=b'new', etype=3, machine=40):
@@ -36,7 +38,7 @@ def elf(tag=b'new', etype=3, machine=40):
 
 
 class Base(object):
-    SHELL = '/bin/sh'
+    SHELL = POSIX_SHELL
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix='cpa-test-')
@@ -94,12 +96,22 @@ class Base(object):
         start = lines.index('supported_table() {') + 2                   # after "cat <<'EOF'"
         end = lines.index('EOF', start)
         lines[start:end] = TABLE
+        if sys.platform == 'cygwin':
+            # Cygwin's fork/exec loader tries to load the dummy ARM ELF in LD_PRELOAD before the
+            # shell probe stub can run. Keep the installer branch under test, but pass the
+            # library path as data to the stand-in instead of asking Cygwin to load it.
+            lines = [line.replace('LD_PRELOAD=$1 "$PROBE_HOST"', 'TEST_PROBE_LIB=$1 "$PROBE_HOST"') for line in lines]
         self.script = r / 'carplay-advanced.sh'
         self.script.write_text('\n'.join(lines) + '\n')
         self.bin = r / 'stubs'
         self.bin.mkdir(exist_ok=True)
-        # libcpprobe.so's line, as /bin/cat with it preloaded prints it on the head unit (TEST_PROBE; unset = no answer)
-        self.stub('probe-host', 'case "$LD_PRELOAD" in *libcpprobe.so) [ -n "${TEST_PROBE:-}" ] && echo "$TEST_PROBE" ;; esac\nexit 0')
+        # Stand-in for libcpprobe.so's constructor output. On Cygwin, avoid LD_PRELOAD of the dummy ARM ELF
+        # into a shell process; the copied installer passes the path through TEST_PROBE_LIB instead.
+        if sys.platform == 'cygwin':
+            probe_body = 'case "$TEST_PROBE_LIB" in *libcpprobe.so) [ -n "${TEST_PROBE:-}" ] && echo "$TEST_PROBE" ;; esac\nexit 0'
+        else:
+            probe_body = 'case "$LD_PRELOAD" in *libcpprobe.so) [ -n "${TEST_PROBE:-}" ] && echo "$TEST_PROBE" ;; esac\nexit 0'
+        self.stub('probe-host', probe_body)
         self.calls_file = r / "calls"
         self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'], TEST_CALLS=str(self.calls_file),
                         TEST_ROOT=str(r), TEST_SHELL=self.SHELL)
@@ -497,7 +509,7 @@ class InstallTest(Base):
         (self.p['SETTINGS'] / 'hud_debug').write_text('1\n')                      # was on: stays on
         log = shm / 'carplaymenu.log'
         log.write_text('CarPlayMenu: HUD: MOST client 3, device 2003\n')
-        # a stand-in for the plugin: takes the batch and answers like the cluster would (F54 form for 5, 6WB form for 0x1f)
+        # a stand-in for the plugin: takes the batch and answers like the cluster would (MINI F5x form for 5, BMW 6WB form for 0x1f)
         fake = ('for i in $(seq 1 100); do if [ -f "$1/carplaymenu-hudcmd" ]; then rm -f "$1/carplaymenu-hudcmd"; {\n'
                 'echo "CarPlayMenu: HUD in   0101>2003 fkt c04 op d len 6: 00 05 00 78 00 48"\n'
                 'echo "CarPlayMenu: HUD in   0101>2003 fkt c04 op d len 6: 00 18 00 00 00 00"\n'
@@ -508,8 +520,8 @@ class InstallTest(Base):
         bg = subprocess.Popen(['/bin/sh', str(self.root / 'fake.sh'), str(shm)])
         self.addCleanup(bg.kill)
         out = self.run_script('hud-probe')
-        self.assertIn('0x0005: 120 x 72 (F54 form)', out)
-        self.assertIn('0x001f: 221 x 158 (6WB form)', out)
+        self.assertIn('0x0005: 120 x 72 (MINI F5x form)', out)
+        self.assertIn('0x001f: 221 x 158 (BMW 6WB form)', out)
         self.assertNotIn('0x0018', out)                                               # 0 x 0: no such surface
         self.assertIn('fkt 22b op d len 7: 00 01 00 05 01 00 04', out)
         self.assertTrue((self.p['SETTINGS'] / 'hud_debug').exists())
@@ -1126,6 +1138,20 @@ class ClusterTest(Base):
         self.assertEqual(self.rghook(), 'librghook-kombi.so')
         self.assertEqual(self.cluster(), 'both')
         self.assertIn('--cluster needs most, kombi or both', self.run_script('install', '--cluster', 'x', rc=1))
+
+    def test_hud_tx_override_is_saved_and_reported(self):
+        out = self.run_script('install', '--hud-tx', '4')
+        self.assertIn('HUDTerminal transmissionType: 4', out)
+        self.assertEqual((self.p['SETTINGS'] / 'hud_tx').read_text().strip(), '4')
+        out = self.run_script('hud-probe', rc=1)  # no MOST log in this fixture; switch is printed before that check
+        self.assertIn('switch hud_tx: on (4)', out)
+
+    def test_hud_tx_dry_run_and_argument_validation(self):
+        out = self.run_script('install', '--hud-tx', '4', '--dry-run')
+        self.assertIn('HUDTerminal transmissionType: 4', out)
+        self.assertFalse((self.p['SETTINGS'] / 'hud_tx').exists())
+        self.assertIn('--hud-tx needs 0 or 4', self.run_script('install', '--hud-tx', '2', rc=1))
+        self.assertIn('--hud-tx requires install', self.run_script('status', '--hud-tx', '4', rc=1))
 
     def hud_only(self, probe, *extra):
         return self.run_script('install', '--kind', 'id6', '--mode', 'hud', *extra, TEST_PROBE=probe)

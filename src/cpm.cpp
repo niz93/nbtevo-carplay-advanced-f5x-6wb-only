@@ -16,7 +16,7 @@
 //     HUD effects
 //       84 / 85  Fill toward the turn       hud_fill (hud.h): the maneuver fills with the effect colour over the last 300 m
 //       88 / 89  Blink near the turn        hud_blink: it blinks route colour <-> effect colour in the last fifth
-//       Effect colour                       96-98 / 99-101: Orange / Grey / White = hud_colour 5 / 3 / 4 (F54 palette at night)
+//       Effect colour                       96-98 / 99-101: Orange / Grey / White = hud_colour 5 / 3 / 4 (shared MINI F5x palette at night, measured on F54)
 //     iDrive control
 //       6 / 17   Enable knob tilts          carplay_tilt patch (src/tilt_006.json) in the HMI's memory
 //       Touchpad
@@ -237,7 +237,7 @@ int sensLevel(u32 mm) {
   return mm < 138 ? 0 : mm < 213 ? 1 : 2;
 }  // a hand-written value shows as the nearest level
 
-// "HUD effects > Effect colour": radio buttons for hud_colour, the fill / blink colour index (hud.h); F54 palette at night
+// "HUD effects > Effect colour": radio buttons for hud_colour, the fill / blink colour index (hud.h); shared MINI F5x palette at night (measured on F54)
 // (hud_probe.sh colours, 2026-11-13): 5 orange, 3 grey, 4 white (the route's own colour)
 struct Colour {
   unsigned action, model;

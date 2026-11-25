@@ -66,7 +66,7 @@ inline int udiv(int a, int b) {
   return (int)q;
 }
 
-// tone: 0 the route (fill colour 4, white), 1 the context (3, grey on the F54): two colours in one picture, as the BMW navigation's own
+// tone: 0 the route (fill colour 4, white), 1 the context (3, grey on MINI F5x, measured on F54): two colours in one picture, as the BMW navigation's own
 // HUD pictures. A tone 1 piece over tone 0 pieces shows grey there (the pin's hole, the ferry's windows).
 const u32 kMaxPieces = 192;  // a maneuver takes at most 64, the lanes (addLanes, Mapbox's lane drawings) up to 8 x 19 more; whole
                              // polygons (mergePieces) join them back into a few MOST calls a lane
@@ -865,7 +865,7 @@ inline void allTone(Shape &s, u32 from, u32 to) {
 
 // Whole polygons (always on; the test switch hud_convex keeps the pieces): the convex pieces of one tone that share an edge are joined
 // back into one polygon of up to kPolyPts points (NBT-AAD's 6WA pictures are 2..4 such polygons each), so a picture takes a few MOST
-// calls instead of up to 96. The F54's terminal fills a polygon that is not convex cleanly (car, 2026-11-13). Pieces are joined only
+// calls instead of up to 96. The MINI F5x terminal (measured on F54) fills a polygon that is not convex cleanly (car, 2026-11-13). Pieces are joined only
 // with pieces of the same tone with no other tone drawn between them, so what covers what stays as drawn. A ring closed on itself
 // keeps a zero-width slit where its ends meet.
 const u32 kPolyPts = 96;  // the cluster takes up to 99 (NBT-AAD, F010 KOMBI firmware)

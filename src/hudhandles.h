@@ -2,12 +2,12 @@
 //
 // The cluster gives out the handles: at start the navigation creates its instances (200 CreateInstance, answer [index u16][handle u16])
 // and puts them into frames (22B FrameAddItem, answer [frame u16][item u16][u8][kind u16]). The handle numbers are the cluster's
-// choice, so they differ between clusters (the F25 X3's texts are on 0x0C/0x12/0x0F, issue #9; the F54's on 2/3/4); what an instance
-// is shows in the kind the navigation adds it with (MINI F54, car log of 2026-11-13: 22 creations, frames 01, 0B and 10):
+// choice, so they differ between clusters (the F25 X3's texts are on 0x0C/0x12/0x0F, issue #9; the shared MINI F5x panel's on 2/3/4, captured on F54); what an instance
+// is shows in the kind the navigation adds it with (MINI F5x shared panel, captured on F54 in the car log of 2026-11-13: 22 creations, frames 01, 0B and 10):
 //     kind 4  a picture: the first two of a frame are the guiding icon's two buffers (then decreasing arrow, lane guidance)
 //     kind 3  the street text      kind 5  the distance text      kind 2  the unit text      kind 6  the bargraph
 // The navigation (NavNBTEvoController) has two families of layouts, chosen by the cluster: frames 1-3 (instances "TopFrame",
-// "1.GuidingIcon", "2.GuidingIcon"...; the F54, the F-series mid clusters, the 6WB) and frames 11-13 ("Top_Frame_11",
+// "1.GuidingIcon", "2.GuidingIcon"...; the MINI F5x shared panel, BMW F-series mid clusters, BMW 6WB) and frames 11-13 ("Top_Frame_11",
 // "Coming_Road_11_1", "Distance_11_1", "Unit_11_1", "Road_Icon_11_1/2", "Next_Maneuver_Arrow_11_1/2", "Guiding_Icon_11_1/2"...; the
 // full-display clusters). In 1-3 the pictures are added before the texts and the first two are the guiding icon; in 11-13 the texts
 // come first and the guiding icon is the fifth and sixth picture, by the navigation's name table. The 11-13 reading was NOT tried in

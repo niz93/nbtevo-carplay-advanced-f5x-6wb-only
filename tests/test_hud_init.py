@@ -5,6 +5,7 @@
   * the copies to the other terminal (82/02) with its own handles; hud_hide and the size question stay on the terminal drawn on;
   * texts: the distance's decimal comma, typographic characters and invisible format characters (Yandex Navi);
   * day / night from the HMI's CarPlay night mode, and the effect colour by day (hud_colour_day)."""
+import os
 import shutil
 import subprocess
 import tempfile
@@ -16,18 +17,30 @@ HARNESS = r'''
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+static char g_testHudTx[16] = "0";
+static char g_testHudCmd[128] = "";
+static unsigned g_lastTxType, g_lastVarTag, g_lastVarValue;
 extern "C" {
-int open(const char *, int, ...);
-long read(int, void *, unsigned long);
-long write(int, const void *, unsigned long);
-int close(int);
-int unlink(const char *);
+int open(const char *path, int, ...) {
+  if (strstr(path, "/carplaymenu/hud_tx")) return 99;
+  if (!strcmp(path, "/dev/shmem/carplaymenu-hudcmd") && g_testHudCmd[0]) return 98;
+  return -1;
+}
+long read(int fd, void *buf, unsigned long n) {
+  const char *src = fd == 99 ? g_testHudTx : fd == 98 ? g_testHudCmd : 0;
+  if (!src) return -1;
+  unsigned long k = strlen(src); if (k > n) k = n;
+  memcpy(buf, src, k); return (long)k;
+}
+long write(int, const void *, unsigned long n) { return (long)n; }
+int close(int) { return 0; }
+int unlink(const char *) { return 0; }
 int usleep(unsigned) { return 0; }
 }
 #include "src/hud.h"
 using namespace hud;
 static unsigned g_id;
-static int g_sizeMode;  // ImageGetSize: 0 no answer, 1 the F54 form, 2 refused
+static int g_sizeMode;  // ImageGetSize: 0 no answer, 1 the shared MINI F5x form, 2 refused
 static unsigned g_w, g_h;
 // a message on the bus as the MOST service hands it to its clients
 static void inject(unsigned char fb, unsigned char inst, unsigned short src, unsigned short dst, unsigned short fkt, unsigned char op,
@@ -51,6 +64,9 @@ static void sCtor(void *, void *, void *, int, unsigned, unsigned, unsigned id, 
 static void sWrite(void *, const void *pv, unsigned n) {
   const unsigned char *p = (const unsigned char *)pv;
   if (g_id != kReqProcessMessage || n < 36) return;
+  g_lastTxType = (unsigned)p[4] | (unsigned)p[5] << 8 | (unsigned)p[6] << 16 | (unsigned)p[7] << 24;
+  g_lastVarTag = (unsigned)p[8] | (unsigned)p[9] << 8 | (unsigned)p[10] << 16 | (unsigned)p[11] << 24;
+  g_lastVarValue = (unsigned)p[12] | (unsigned)p[13] << 8 | (unsigned)p[14] << 16 | (unsigned)p[15] << 24;
   unsigned char inst = p[21];
   unsigned short fkt = p[22] | p[23] << 8;
   unsigned dn = p[32] | p[33] << 8 | p[34] << 16 | (unsigned)p[35] << 24;
@@ -67,7 +83,7 @@ static void sWrite(void *, const void *pv, unsigned n) {
       inject(0x82, inst, g_host, g_self, fkt, 9, e, 4);
     }
   }
-  if (fkt == 0xC04 && dn == 3 && inst == g_inst && g_sizeMode) {  // the other form: refused, as the F54 does
+  if (fkt == 0xC04 && dn == 3 && inst == g_inst && g_sizeMode) {  // the BMW 6WB form: refused by the MINI F5x panel
     const unsigned char e[4] = { d[0], d[1], 5, 0 };
     inject(0x82, inst, g_host, g_self, fkt, 0xF, e, 4);
   }
@@ -125,6 +141,23 @@ int main() {
       unsigned h = 0; int k = 0; sscanf(rest, "%x %n", &h, &k);
       unsigned char d[128]; unsigned n; hex(rest + k, d, &n); d[n] = 0;
       setText((unsigned short)h, (const char *)d);
+    } else if (!strcmp(cmd, "readtx")) {
+      snprintf(g_testHudTx, sizeof g_testHudTx, "%d", a);
+      chooseBox();
+      const u8 d[3] = { 0, 1, 1 };
+      call(0x204, d, 3, true);
+      printf("DSI %u/%u/%u\n", g_lastTxType, g_lastVarTag, g_lastVarValue);
+    } else if (!strcmp(cmd, "cmdtx")) {
+      g_hudTxType = (u32)a;
+      strcpy(g_testHudCmd, "204 000101\n");
+      runCmds();
+      printf("DSI %u/%u/%u\n", g_lastTxType, g_lastVarTag, g_lastVarValue);
+      g_testHudCmd[0] = 0;
+    } else if (!strcmp(cmd, "voltx")) {
+      g_hudTxType = (u32)a;
+      g_amHost = 0x0101;
+      volume(1);
+      printf("DSI %u/%u/%u\n", g_lastTxType, g_lastVarTag, g_lastVarValue);
     } else if (!strcmp(cmd, "night")) {
       unsigned char d[16]; unsigned n; hex(rest, d, &n);
       inject(0x24, 0x70, 0x2000, 0x2010, 0xCD7, 6, d, n);
@@ -134,8 +167,9 @@ int main() {
   }
 }
 '''
-# the MINI F54's navigation set-up as the plugin logged it in the car (2026-11-13): CreateInstance index 1, then FrameAddItem
-F54 = ['22b 00 01 00 05 01 00 04', '22b 00 01 00 06 01 00 04', '22b 00 01 00 07 01 00 04', '22b 00 01 00 08 01 00 04',
+# shared MINI F5x panel set-up, captured on F54 (2026-11-13): CreateInstance index 1, then FrameAddItem
+MINI_F5X_MODELS = ('F54', 'F55', 'F56', 'F57', 'F60')
+MINI_F5X = ['22b 00 01 00 05 01 00 04', '22b 00 01 00 06 01 00 04', '22b 00 01 00 07 01 00 04', '22b 00 01 00 08 01 00 04',
        '22b 00 01 00 09 01 00 04', '22b 00 01 00 0a 01 00 04', '22b 00 01 00 02 01 00 03', '22b 00 01 00 04 01 00 02',
        '22b 00 01 00 03 01 00 05', '22b 00 01 00 16 0f 00 06']
 # a made-up cluster numbering its instances otherwise (as the F25 X3 does: texts 0x0c / 0x12 / 0x0f, issue #9)
@@ -146,13 +180,14 @@ OTHER = ['22b 00 20 00 15 01 00 04', '22b 00 20 00 16 01 00 04', '22b 00 20 00 0
 class HudInit(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not shutil.which('clang++'):
-            raise unittest.SkipTest('clang++ not found')
+        cxx = os.environ.get('CXX') or shutil.which('clang++') or shutil.which('g++') or shutil.which('c++')
+        if not cxx:
+            raise unittest.SkipTest('C++ compiler not found (set CXX)')
         cls.tmp = tempfile.TemporaryDirectory(prefix='hudinit-')
         src = Path(cls.tmp.name) / 'h.cpp'
         src.write_text(HARNESS)
         cls.exe = Path(cls.tmp.name) / 'h'
-        subprocess.run(['clang++', '-std=c++17', '-w', '-I', str(ROOT), '-I', str(ROOT / 'src'), '-o', str(cls.exe), str(src)],
+        subprocess.run([cxx, '-std=c++17', '-w', '-I', str(ROOT), '-I', str(ROOT / 'src'), '-o', str(cls.exe), str(src)],
                        check=True)
 
     @classmethod
@@ -166,8 +201,8 @@ class HudInit(unittest.TestCase):
     def calls(self, out):
         return [l for l in out if not l.startswith(('#', 'BOX', 'HANDLES', 'NIGHT'))]
 
-    def test_f54_set_up_keeps_the_f54_handles(self):
-        out = self.run_lines(['setup 0 200 00 01 00 01'] + ['setup 0 ' + a for a in F54] + ['take', 'handles'])
+    def test_shared_mini_f5x_set_up_keeps_the_shared_panel_handles(self):
+        out = self.run_lines(['setup 0 200 00 01 00 01'] + ['setup 0 ' + a for a in MINI_F5X] + ['take', 'handles'])
         self.assertIn('HANDLES 1 2 3 4 5 6 22', out)
 
     def test_other_numbering_is_drawn_on(self):
@@ -179,7 +214,7 @@ class HudInit(unittest.TestCase):
         self.assertTrue(any(c.startswith('00 21d 00 15') for c in calls))                          # the picture into 0x15 (B was on show)
 
     def test_a_set_up_on_82_02_starts_copies_with_its_handles(self):
-        out = self.run_lines(['setup 0 ' + a for a in F54] + ['setup 2 ' + a for a in OTHER] + ['take', 'draw'])
+        out = self.run_lines(['setup 0 ' + a for a in MINI_F5X] + ['setup 2 ' + a for a in OTHER] + ['take', 'draw'])
         calls = self.calls(out)
         self.assertIn('# CarPlayMenu: HUD: copies to HUDTerminal 82/02 (the navigation set it up; hud_inst "0" stops them)', out)
         self.assertIn('00 210 00 02 00 00 4d 00 61 00 69 00 6e 00 20 00 53 00 74 00 00', calls)
@@ -189,7 +224,7 @@ class HudInit(unittest.TestCase):
         self.assertIn('02 20e 00 16 00 15', calls)                                                 # both handles of 20E mapped
 
     def test_the_frames_bar_is_hidden_on_both_terminals(self):
-        out = self.calls(self.run_lines(['setup 0 ' + a for a in F54] + ['setup 2 ' + a for a in OTHER + ['22b 00 20 00 30 0f 00 06']] +
+        out = self.calls(self.run_lines(['setup 0 ' + a for a in MINI_F5X] + ['setup 2 ' + a for a in OTHER + ['22b 00 20 00 30 0f 00 06']] +
                                         ['take', 'draw']))
         self.assertIn('00 204 00 16 00', out)
         self.assertIn('02 204 00 30 00', out)
@@ -202,7 +237,7 @@ class HudInit(unittest.TestCase):
         self.assertFalse(any(c.startswith('02 c04') for c in calls))
 
     def test_sizes(self):
-        cases = {(1, 120, 72): 'BOX mini',                 # the F54: its car-verified MINI box
+        cases = {(1, 120, 72): 'BOX mini',                 # shared MINI F5x panel, car-verified on F54
                  (1, 126, 77): 'BOX fit 36 16 89 69',      # PR #13's F30 6WB buffer (it verified 35 15 85 65 by hand)
                  (1, 199, 129): 'BOX 6wa',                 # the F20 (NBT-AAD's 6WA box)
                  (1, 0, 0): 'BOX mini',                    # not an instance yet: the box stays (mini before)
@@ -240,6 +275,18 @@ class HudInit(unittest.TestCase):
         out = self.run_lines(['night 00 01 01', 'night 00 01 00', 'fxday 2', 'night 00 01 00', 'night 00 01 01'])
         self.assertEqual([l for l in out if l.startswith('NIGHT')],
                          ['NIGHT 1 COLOUR 5', 'NIGHT 0 COLOUR 5', 'NIGHT 0 COLOUR 2', 'NIGHT 1 COLOUR 5'])
+
+    def test_hud_transmission_type_is_validated_and_serialized(self):
+        self.assertIn('DSI 4/1/0', self.run_lines(['readtx 4']))
+        self.assertIn('DSI 0/1/0', self.run_lines(['readtx 0']))
+        self.assertIn('DSI 0/1/0', self.run_lines(['readtx 9']))  # invalid values fail closed to the legacy default
+
+    def test_hud_test_channel_uses_the_selected_transmission_type(self):
+        self.assertIn('DSI 4/1/0', self.run_lines(['cmdtx 4']))
+        self.assertIn('DSI 0/1/0', self.run_lines(['cmdtx 0']))
+
+    def test_audio_master_volume_keeps_transmission_type_zero(self):
+        self.assertIn('DSI 0/1/0', self.run_lines(['voltx 4']))
 
 
 if __name__ == '__main__':

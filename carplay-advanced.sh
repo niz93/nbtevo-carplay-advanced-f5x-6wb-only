@@ -338,6 +338,7 @@ ASSUME_YES=0
 RESTART=0
 KEEP_CONFIG=0
 CLUSTER_FORCE=
+HUD_TX_FORCE=
 LOG=
 BACKUP=
 LOCKED=0
@@ -440,6 +441,7 @@ Usage: sh carplay-advanced.sh install|uninstall|status|restart|hud-probe [option
   --cluster most|kombi|both
                         Where CarPlay directions go, instead of what the probe finds: most = the MOST HUDTerminal (F-series),
                         kombi = the Ethernet KOMBI (G-series, J29), both = the two (a car with a KOMBI and a MOST HUDTerminal)
+  --hud-tx 0|4           Set MOST HUDTerminal DSI transmissionType (0 default; 4 experimental, based on external F60 evidence)
   --help                Show this help
 
 The computer detects the generation from HmiMain3D: iDrive 6 has the native CarPlay knob-tilt handlers, iDrive 5 does not.
@@ -490,6 +492,10 @@ parse_args() {
             [ "$#" -ge 2 ] || die '--cluster needs most, kombi or both.'
             case "$2" in most|kombi|both) CLUSTER_FORCE=$2 ;; *) die "--cluster needs most, kombi or both, not '$2'." ;; esac
             shift ;;
+        --hud-tx)
+            [ "$#" -ge 2 ] || die '--hud-tx needs 0 or 4.'
+            case "$2" in 0|4) HUD_TX_FORCE=$2 ;; *) die "--hud-tx needs 0 or 4, not '$2'." ;; esac
+            shift ;;
         --help|-h) usage; exit 0 ;;
         *) die "Unknown argument: $1" ;;
     esac
@@ -502,6 +508,7 @@ parse_args "$@"
 [ -n "$ACTION" ] || { usage; exit 1; }
 [ "$KEEP_CONFIG" -eq 0 ] || [ "$ACTION" = uninstall ] || die '--keep-config requires uninstall.'
 [ "$RESTART" -eq 0 ] || [ "$ACTION" = install ] || [ "$ACTION" = uninstall ] || die '--restart-hmi goes with install or uninstall.'
+[ -z "$HUD_TX_FORCE" ] || [ "$ACTION" = install ] || die '--hud-tx requires install.'
 # On the head unit the computer passes --mode (and --kind); a manual run falls back to the generation's default. From a computer the
 # mode is resolved after the generation is detected, so this initial value is replaced there.
 [ -n "$MODE" ] || MODE=$(default_mode)
@@ -715,7 +722,7 @@ EOF
         vc_a=; read -r vc_a < /dev/tty || vc_a=n
         case "$vc_a" in ''|[Yy]*) ;; *) say 'Visual check skipped.'; return 0 ;; esac
         echo '--- visual check (your answers) ---' >> "$WORK/out"
-        for vc in '6wa:6WA layout (BMW F-series old cluster) on 82/00' 'mini:MINI F54 picture box on 82/00' \
+        for vc in '6wa:6WA layout (BMW F-series old cluster) on 82/00' 'mini:shared MINI F5x picture box on 82/00' \
                   '6wb:6WB layout (BMW multifunction cluster) on 82/00' '6wa-hud:6WA layout on the HUD terminal 82/02' \
                   '6wb-hud:6WB layout on the HUD terminal 82/02'; do
             vc_n=${vc%%:*}
@@ -969,6 +976,7 @@ Installer: $VERSION"
     [ "$DRY_RUN" -eq 0 ] || args="$args --dry-run"
     [ "$KEEP_CONFIG" -eq 0 ] || args="$args --keep-config"
     [ -z "$CLUSTER_FORCE" ] || args="$args --cluster $CLUSTER_FORCE"
+    [ -z "$HUD_TX_FORCE" ] || args="$args --hud-tx $HUD_TX_FORCE"
     case "$ACTION" in
         install) if [ "$DRY_RUN" -eq 1 ]; then step 'Checking the installation on the head unit (dry run)'; else step 'Installing on the head unit'; fi ;;
         uninstall) step 'Uninstalling on the head unit' ;;
@@ -1190,7 +1198,7 @@ hud_probe() {
     say "CarPlay Advanced Settings installer $VERSION; hud-probe"
     say "HMI: ${hmi_build:-unknown}"
     say "Plugin: $(if [ -d "$PLUGIN" ]; then echo "installed$([ -f "$PLUGIN/hud_only" ] && echo ' (HUD-only menu: the drawing runs in mm-ipod, during a CarPlay connection)')"; else echo 'not installed'; fi)"
-    for f in hud_guidance hud_debug hud_layout hud_inst hud_box hud_box_6wa hud_hide hud_text_handles hud_comma hud_colour_day \
+    for f in hud_guidance hud_debug hud_layout hud_tx hud_inst hud_box hud_box_6wa hud_hide hud_text_handles hud_comma hud_colour_day \
         hud_handles hud_handles_2 cluster; do
         if [ -f "$SETTINGS/$f" ]; then say "  switch $f: on$(v=; read -r v < "$SETTINGS/$f" 2>/dev/null; [ -n "$v" ] && echo " ($v)")"; else say "  switch $f: off"; fi
     done
@@ -1200,7 +1208,7 @@ hud_probe() {
     [ -f "$HP_LOG" ] || { say "No plugin log ($HP_LOG): the plugin has not started since the last boot."; return 1; }
     say '--- what the plugin found at its start (MOST client, registry, handles from the set-up, layout, picture box) ---'
     grep -e 'HUD: MOST' -e 'HUD: registry' -e 'HUDTerminal 82' -e 'HUD: layout probe' -e 'HUD: cluster layout' -e 'HUD: picture' \
-        -e 'HUD: handles' -e 'HUD: copies' -e 'HUD: other client' -e 'HUD: texts on' -e 'HUD: day' -e 'HUD: night' "$HP_LOG" | sed -n 1,40p
+        -e 'HUD: handles' -e 'HUD: copies' -e 'HUD: other client' -e 'HUD: texts on' -e 'HUD: transmissionType' -e 'HUD: day' -e 'HUD: night' "$HP_LOG" | sed -n 1,40p
     [ ! -f "$HP_CMD" ] || { say "The test channel is busy ($HP_CMD); try again in a minute."; return 1; }
     hp_start=$(count_lines "$HP_LOG")
     # 1. "HUD debug log" switched on (off and on again if it was on): the plugin logs its terminals and handles, then every message
@@ -1209,7 +1217,7 @@ hud_probe() {
     if [ "$HP_WAS" -eq 1 ]; then rm -f "$HP_DBG"; sleep "$HUD_PROBE_WAIT"; fi
     echo 1 > "$HP_DBG" || { say "Cannot write $HP_DBG."; return 1; }
     sleep "$HUD_PROBE_WAIT"
-    # 2. the surfaces: ImageGetSize (C04, it only reads) for 0x01..0x40, the F54 form [h] and the 6WB form [h][01]
+    # 2. the surfaces: ImageGetSize (C04, it only reads) for 0x01..0x40, the MINI F5x form [h] and the BMW 6WB form [h][01]
     hp_batch=
     hp_i=1
     while [ "$hp_i" -le 64 ]; do
@@ -1239,8 +1247,8 @@ c04 00${hp_h}01
     while read -r hp_l; do
         case "$hp_l" in *"fkt c04 op d "*) ;; *) continue ;; esac
         set -- ${hp_l##*: }
-        if [ "$#" -ge 7 ]; then hp_w=$((16#$4$5)); hp_ht=$((16#$6$7)); hp_form=6WB
-        elif [ "$#" -ge 6 ]; then hp_w=$((16#$3$4)); hp_ht=$((16#$5$6)); hp_form=F54
+        if [ "$#" -ge 7 ]; then hp_w=$((16#$4$5)); hp_ht=$((16#$6$7)); hp_form='BMW 6WB'
+        elif [ "$#" -ge 6 ]; then hp_w=$((16#$3$4)); hp_ht=$((16#$5$6)); hp_form='MINI F5x'
         else continue; fi
         [ "$hp_w" -gt 0 ] && [ "$hp_ht" -gt 0 ] || continue
         say "  0x$1$2: $hp_w x $hp_ht ($hp_form form)"
@@ -1545,6 +1553,7 @@ else
     say '  remove the plugin path-manager links (only links, never a file), so the originals are used again'
 fi
 if exists "$NBT_AAD_PLUGIN"; then say "Note: NBT-AAD is installed too ($NBT_AAD_PLUGIN); this script does not touch it."; fi
+[ -z "$HUD_TX_FORCE" ] || say "  HUDTerminal transmissionType: $HUD_TX_FORCE (will be saved as $SETTINGS/hud_tx)"
 CLUSTER_KIND=
 RGHOOK=librghook.so
 if [ "$ACTION" = install ]; then
@@ -1901,7 +1910,10 @@ if [ "$ACTION" = install ]; then
     say 'Links for the switched-on options made with the new boot.sh.'
     { make_dirs "$SETTINGS" && echo "$CLUSTER_KIND" > "$SETTINGS/cluster"; } \
         || say "Note: $SETTINGS/cluster not written: the menu plugin draws on MOST (as with most)."
-
+    if [ -n "$HUD_TX_FORCE" ]; then
+        { make_dirs "$SETTINGS" && echo "$HUD_TX_FORCE" > "$SETTINGS/hud_tx"; } \
+            || say "Note: $SETTINGS/hud_tx not written; transmissionType remains unchanged."
+    fi
 fi
 say "SUCCESS: $ACTION completed. Previous files: $BACKUP ; system originals: $ORIG"
 if [ "$ACTION" = install ] && [ "$MODE" = hud ]; then

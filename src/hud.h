@@ -16,7 +16,7 @@
 //     name (200 CreateInstance) and puts them into frames (22B FrameAddItem). Their answers pass this client too: hudhandles.h reads
 //     the roles from them, per terminal, and the map is kept in the settings folder (hud_handles, hud_handles_2) for the next start
 //     and for the sender in mm-ipod. Then the picture buffer's size is asked (C04 ImageGetSize) and the picture box fitted to it.
-//   * terminals: 82/00 is drawn on (the HUD on the MINI F54; "FB_HUD_Terminal_hud" in its firmware); 82/02 ("FB_HUD_Terminal_kombi",
+//   * terminals: 82/00 is drawn on (the shared MINI F5x panel family F54/F55/F56/F57/F60; "FB_HUD_Terminal_hud" in its firmware); 82/02 ("FB_HUD_Terminal_kombi",
 //     on clusters with a navigation area of their own, and a windscreen HUD's on some BMWs) gets a copy of every drawing call, with its
 //     own handles, once the navigation was seen setting it up. The switch file hud_inst decides instead (see chooseBox).
 //   * the BMW navigation has priority: while another client sends commands to 0x82, nothing is drawn (and the picture is redrawn later).
@@ -123,7 +123,7 @@ inline u8 instOf(int slot) {
 inline int slotOf(u8 inst) {
   return inst == 2 ? 1 : inst == 0 ? 0 : -1;
 }
-// the layout probe (detectLayout): ImageGetSize answered for handle 5 (the 6WA picture) / 0x1F (the 6WB plane); the BMW navigation
+// the layout probe (detectLayout): ImageGetSize answered for handle 5 (the MINI F5x / 6WA-compatible picture) / 0x1F (the BMW 6WB plane); the BMW navigation
 // seen drawing on a 6WB handle (0x18..0x35)
 volatile int g_size5, g_size1f, g_seen6wb;
 // the picture buffer's size (measureBox): the handle asked, its answer (w, h) and the answers / refusals counted
@@ -137,6 +137,8 @@ volatile int g_learnt[2];
 // CarPlaySetNightMode, CD7), as it passes; Vehicle 05/00 DayNight_ChangeOver (C31) is only logged (its values are not known).
 volatile int g_night = -1;
 volatile u32 g_dnLogged;
+// Optional HUDTerminal DSI transmissionType override (hud_tx switch): default 0; 4 is an experimental opt-in based on an external MINI F60 report, not validated on F56.
+u32 g_hudTxType;
 
 u32 nowMs() {
   hud_timespec t;
@@ -265,7 +267,7 @@ bool isOurs(u16 fkt, const u8 *d, u32 n) {
   return false;
 }
 
-// Debugging a cluster (F54 vs the 6WA profile): with debug_log, the first 300 HUDTerminal messages in both directions go to the log
+// Debugging the shared MINI F5x panel (measurements made on F54) vs the 6WA-compatible profile: with debug_log, the first 300 HUDTerminal messages in both directions go to the log
 // with their first data bytes (answers and errors to our calls, and the BMW navigation's own drawing commands when it guides).
 // Without it only the cluster's errors to our calls (always) and, for 10 s after a test channel batch (g_probeMs), everything.
 volatile u32 g_dbg, g_probeMs;
@@ -376,10 +378,12 @@ void onData(void *, void *is) {
     if (op == kOpResultAck && dst == g_self)
       g_answers++;
     u32 varTag = rd32(p + 4), varVal = rd32(p + 8);
-    // ImageGetSize answers: [handle][w][h] (F54, 6 bytes) or [handle][01][w][h] (6WB, 7 bytes), sizes u16 big-endian. The F54 also
-    // answers for handles it does not have, with 0 x 0: only a real size counts. Only the terminal drawn on.
-    if (fkt == 0xC04 && dst == g_self && src != g_self && inst == g_inst) {
-      if (op == kOpResultAck && (an == 6 || an == 7)) {
+    bool normal = varTag == 2 && !(varVal >= 4 && varVal <= 9);  // not the send status of a message of ours
+    // ImageGetSize replies must belong to the current terminal endpoint and transport. Do not let an echo,
+    // another device, a different DSI variant, or a delayed tx=0 error satisfy a tx=4 measurement.
+    // The OEM F60 capture shows response variantTag=2 / variantValue=0; tx follows the request.
+    if (fkt == 0xC04 && dst == g_self && src == g_host && inst == g_inst && rd32(p) == g_hudTxType && varTag == 2 && varVal == 0) {
+      if (op == kOpResultAck && (an == 6 || (an == 7 && p[34] == 1))) {
         const u8 *a = p + 32 + (an == 7 ? 3 : 2);
         u16 h = (u16)(p[32] << 8 | p[33]), w = (u16)(a[0] << 8 | a[1]), ht = (u16)(a[2] << 8 | a[3]);
         if (w && ht && h == 5)
@@ -391,11 +395,10 @@ void onData(void *, void *is) {
           g_askHt = ht;
           g_askOk = 1;
         }
-      } else if (op == 0xF || op == 9)
+      } else if ((op == 0xF || op == 9) && an >= 3 && (u16)(p[32] << 8 | p[33]) == g_askH)
         g_askErr++;
     }
     dbgMsg(src == g_self ? "echo" : dst == g_self ? "in  " : "seen", src, dst, fkt, op, p, len);
-    bool normal = varTag == 2 && !(varVal >= 4 && varVal <= 9);  // not the send status of a message of ours
     bool drawing = (fkt >= 0x200 && fkt <= 0x22B) || (fkt >= 0xC03 && fkt <= 0xC09);
     u32 dn = rd32(p + 28);
     const u8 *dd = p + 32;
@@ -417,7 +420,7 @@ void onData(void *, void *is) {
       }
     }
     if (op <= 8 && src != g_self && normal && drawing && !isOurs(fkt, dd, dn)) {  // another client (the BMW navigation) drawing
-      if (inst == g_inst && dn >= 2 && (dd[0] << 8 | dd[1]) >= 0x18 && (dd[0] << 8 | dd[1]) <= 0x35)  // 6WB: the F54's end at 0x17
+      if (inst == g_inst && dn >= 2 && (dd[0] << 8 | dd[1]) >= 0x18 && (dd[0] << 8 | dd[1]) <= 0x35)  // BMW 6WB: the shared MINI F5x panel's known handles end at 0x17
         g_seen6wb = 1;
       if (!g_navMs) {
         char m[120];
@@ -495,7 +498,7 @@ enum {
   kRemoveAll = 0x220
 };
 // Where the picture is. The shapes below are drawn in the 6WA box (70,20)-(170,120) (F20, NBT-AAD), which needs a picture buffer of at
-// least 170 x 120. The MINI F54's buffers are 120 x 72 (ImageGetSize, car 2026-11-13; 128 x 74 surfaces in its firmware): its BMW
+// least 170 x 120. The shared MINI F5x panel's buffers are 120 x 72 (ImageGetSize, F54 capture 2026-11-13; 128 x 74 surfaces in its firmware): its BMW
 // navigation draws turn arrows in about x 37..83, y 1..68 (captured in the car, HMI ID5_1703-490, 2026-11-11), and a test arrow there
 // was visible while ours in the 6WA box was not (text was). So:
 //   * kBox6wa: drawn as they are;
@@ -515,35 +518,35 @@ int g_boxMode;
 bool g_boxFixed;  // a switch chose the box: measureBox leaves it alone
 Box g_box;
 // hud_hide (PR #13, FreZZZeR): handles (decimal) made invisible on every picture, for a surface the cluster shows itself over other
-// content (an F30 6WB puts its own distance bar on 0x15/0x16 over the speed: "21 22", car-verified). On the F54 those are the bars.
+// content (an F30 BMW 6WB puts its own distance bar on 0x15/0x16 over the speed: "21 22", car-verified). On the MINI F5x panel (measured on F54) those are the bars.
 u16 g_hide[8];
 u32 g_nHide;
 // hud_comma (ghackt, issue #12): the iPhone writes distances in the phone's locale, "1,5 km" in NL / DE / FR; the clusters' filters
 // made the comma a space ("1 5 km", car-reported on an F31). The distance's comma goes as a point ("1.5"), as the plugin's own
 // metres fallback writes it; with hud_comma it goes as it is. Commas in the street stay spaces.
 bool g_comma;
-// hud_colour_day: the effect colour while the HMI's CarPlay night mode says day (g_night 0). The F54's palette differs by day: its
+// hud_colour_day: the effect colour while the HMI's CarPlay night mode says day (g_night 0). The shared MINI F5x panel's palette (measured on F54) differs by day: its
 // colour 5, orange at night, is green by day (car-reported 2026-11-18); which index is orange by day is not measured yet
 // (hud_probe.sh colours in daylight). Without the file the effect colour is the same day and night.
 int g_fxDay = -1;
-u8 g_fillDim = 3;  // the context tone: grey (F54; 0x0A, the first choice, is transparent there); hud_mono draws everything in kFill
+u8 g_fillDim = 3;  // the context tone: grey (MINI F5x, measured on F54; 0x0A, the first choice, is transparent there); hud_mono draws everything in kFill
 // Test switches (files in the settings folder, read when the HUD starts; all off by default, the drawing without them is unchanged):
 //   hud_convex   the convex pieces of before instead of whole polygons. Whole polygons (hudshapes.h mergePieces, a few calls a picture
-//                instead of up to 96, which is what makes the two effects below cheap) are always on since 2026-11-13: the F54 terminal
+//                instead of up to 96, which is what makes the two effects below cheap) are always on since 2026-11-13: the MINI F5x terminal (measured on F54)
 //                fills them cleanly (hud_probe.sh concave) and the pictures look the same (test switch hud_concave until then).
 //   hud_fill     progress fill: from the step's start the maneuver fills with the effect colour from the bottom up, in 8 steps, full
 //                at the turn. Range (mib2q-carplay-rgi's bargraph rule): the iPhone's step length (maneuver_step_length), at most
 //                the cap; unknown -> the cap. Optional content: "<cap metres> <colour index>", default "300 5".
-//                F54 fill colours at night (car, 2026-11-13, hud_probe.sh colours): 0 4 6 7 white, 2 5 11..31 orange, 3 8 grey,
+//                MINI F5x fill colours at night (measured on F54, 2026-11-13, hud_probe.sh colours): 0 4 6 7 white, 2 5 11..31 orange, 3 8 grey,
 //                1 9 10 nothing (10, the first default, only cut the white away). The BMW navigation uses 4 and 5; day colours unchecked.
 //   hud_blink    in the last fifth of that range the maneuver blinks, 600 ms per phase, route colour <-> effect colour: both phases
 //                sit in the two picture buffers and SwitchVisibility swaps them, one MOST call a phase.
 //   hud_colour   the effect colour index (menu "HUD effects > Effect colour"); else the second number of hud_fill; else 5.
 // hud_fill and hud_blink are menu options since 2026-11-13 ("HUD effects").
-// Colour indexes are the cluster's palette (F54 at night: 4 white = the route, 3 grey = the context tone, 5 orange; 10 = 0x0A transparent).
+// Colour indexes are the shared MINI F5x panel's palette (measured on F54 at night: 4 white = the route, 3 grey = the context tone, 5 orange; 10 = 0x0A transparent).
 bool g_concave, g_fillOn, g_blinkOn;
 u32 g_fxCap = 300;
-u8 g_fxColour = 5;  // orange (F54), as the BMW navigation uses
+u8 g_fxColour = 5;  // orange (MINI F5x), as the BMW navigation uses
 // a switch file: present -> true; up to two numbers in it go to a and b
 bool readSwitch(const char *name, u32 *a, u32 *b) {
   char path[96];
@@ -717,6 +720,20 @@ void chooseBox() {
   g_comma = readSwitch("hud_comma", 0, 0);
   if (g_comma && g_log)
     g_log("CarPlayMenu: HUD: the distance's decimal comma sent as it is (switch hud_comma)");
+  u32 txType = 0;
+  int ntx = readNums("hud_tx", &txType, 1);
+  if (ntx == 1 && (txType == 0 || txType == 4)) {
+    g_hudTxType = txType;
+    logf1("CarPlayMenu: HUD: transmissionType %u (switch hud_tx)", g_hudTxType);
+  } else if (ntx > 0) {
+    g_hudTxType = 0;
+    if (g_log)
+      g_log("CarPlayMenu: HUD: hud_tx must be 0 or 4; using transmissionType 0");
+  } else {
+    g_hudTxType = 0;
+    if (g_log)
+      g_log("CarPlayMenu: HUD: transmissionType 0 (default; set hud_tx to 4 for the experimental MINI F5x research path)");
+  }
   readInst();
 }
 // The handles of the terminal drawn on: the 6WA profile (F20, NBT-AAD; also the MINI F54) until the navigation's set-up (hudhandles.h)
@@ -726,20 +743,20 @@ bool g_mapKnown;  // the handles came from a set-up (this start's or a kept one)
 // The other terminal's handles for its copies (g_mirror): from its own set-up; until then the same numbers.
 hudh::Map g_mmap;
 bool g_mmapKnown;
-const u8 kFill = 4;  // the BMW navigation's colour on 6WA, F54 and 6WB alike (JayJay's 6WB recording: 21B 04 / 0A)
+const u8 kFill = 4;  // the BMW navigation's colour on 6WA, MINI F5x and BMW 6WB alike (JayJay's 6WB recording: 21B 04 / 0A)
 // 6WB: texts in ISO-8859-15 (encoding 01, as verified there; the big distance font has no comma) and the picture moved from the 6WA
 // box (70,20)-(170,120) into the plane, centred on x 116 like JayJay's arrows: (66,40)-(166,140) of 221 x 158
 bool g_6wb;
-
-// a MOST message through DSYSMOSTServer: destination, FBlock, instance, function, OpType, data
-bool send(u16 dst, u8 fb, u8 inst, u16 fkt, u8 op, const u8 *d, u32 n) {
+// This code's g_6wb flag means the BMW 6WB layout; the "MINI 6WB" label in issue #176 describes the shared MINI F5x panel family.
+// a MOST message through DSYSMOSTServer: destination, FBlock, instance, function, OpType, data, transmissionType
+bool send(u16 dst, u8 fb, u8 inst, u16 fkt, u8 op, const u8 *d, u32 n, u32 txType = 0) {
   if (!g_registered || !dst)
     return false;
   Buf p;
   p.u32_(g_client);
-  p.u32_(0);
-  p.u32_(1);
-  p.u32_(0);  // transmission, TXControl variant, value
+  p.u32_(txType);  // DSI transmissionType: 0 default; 4 experimental opt-in (external F60 evidence only)
+  p.u32_(1);       // variantTag = eTransmissionTXControl
+  p.u32_(0);       // variantValue stays 0; it is not the transmissionType selector
   p.u16_(dst);
   p.u16_(g_self);
   p.u8_(fb);
@@ -780,7 +797,7 @@ bool call(u16 fkt, const u8 *d, u32 n, bool primary = false) {
     return false;
   dbgOut(fkt, d, n);
   noteSent(fkt, d, n);
-  bool ok = send(g_host, kFBlock, g_inst, fkt, kOpStartResultAck, d, n);
+  bool ok = send(g_host, kFBlock, g_inst, fkt, kOpStartResultAck, d, n, g_hudTxType);
   u16 mh = primary || fkt == 0xC04 ? 0 : mirrorHost();
   if (mh && n >= 2 && n <= 300) {
     static u8 m[300];
@@ -795,7 +812,7 @@ bool call(u16 fkt, const u8 *d, u32 n, bool primary = false) {
     }
     noteSent(fkt, m, n);
     usleep(5000);
-    send(mh, kFBlock, instOf(1 - slotOf(g_inst)), fkt, kOpStartResultAck, m, n);
+    send(mh, kFBlock, instOf(1 - slotOf(g_inst)), fkt, kOpStartResultAck, m, n, g_hudTxType);
   }
   usleep(20000);  // like the navigation: one call at a time, no bursts
   return ok;
@@ -855,7 +872,7 @@ u32 textChar(u32 c, bool dist) {
     return '.';
   return c;
 }
-// handle, 00, UTF-16BE, 00 00. The street names come from the iPhone in UTF-8; the MINI F54 cluster shows Latin with diacritics and
+// handle, 00, UTF-16BE, 00 00. The street names come from the iPhone in UTF-8; the shared MINI F5x cluster (measured on F54) shows Latin with diacritics and
 // Cyrillic (tested in the car with "ŽĐ Бул"), so they are converted, not stripped. Up to 32 characters; outside the BMP, control
 // characters and broken sequences become a space. hud_text_handles may set a text's handle to 0: not drawn.
 bool setText(u16 h, const char *s) {
@@ -1289,7 +1306,7 @@ void runCmds() {
       if (fkt && host) {
         noteSent((u16)fkt, d, k);
         dbgLine(inst ? "out 82/02" : "out ", (u16)fkt, kOpStartResultAck, d, k);
-        send(host, kFBlock, inst, (u16)fkt, kOpStartResultAck, d, k);
+        send(host, kFBlock, inst, (u16)fkt, kOpStartResultAck, d, k, g_hudTxType);
         usleep(20000);
         ran++;
       }
@@ -1433,7 +1450,7 @@ void use6wb(const char *why) {
   }
 }
 // Which layout the cluster has: ImageGetSize (C04, it only reads) for the 6WB plane 0x1F and the 6WA picture 5, in the 6WB form
-// [handle][01] and the F54 form [handle]. Only the instances the navigation created have a size (the F54 answers 0 x 0 for the
+// [handle][01] and the MINI F5x form [handle]. Only the instances the navigation created have a size (the MINI F5x panel answers 0 x 0 for the
 // others, measured 2026-11-13). 0x1F alone with a size = 6WB. The switch file hud_layout ("6wa" or "6wb") decides instead.
 void detectLayout() {
   int fd = open("/var/opt/hmi/data/rw/carplaymenu/hud_layout", 0);
@@ -1466,8 +1483,8 @@ void detectLayout() {
     g_log(g_size5 ? "CarPlayMenu: HUD: cluster layout 6WA" : "CarPlayMenu: HUD: cluster layout not answered: the 6WA profile");
 }
 // The picture box from the buffer's own size (ghackt's rule, issues #9 and #12): a buffer smaller than the 6WA box gets a square of
-// 25/36 of its shorter side (at most 100), centred across, two thirds down the room left. 120 x 72 gives (35,15)-(85,65), the F54's
-// MINI box, drawn as before; a buffer that holds the 6WA box gets the 6WA box. 0 x 0 is what the F54 answers for a handle that is
+// 25/36 of its shorter side (at most 100), centred across, two thirds down the room left. 120 x 72 gives (35,15)-(85,65), the shared MINI F5x panel's
+// MINI box, drawn as before; a buffer that holds the 6WA box gets the 6WA box. 0 x 0 is what the MINI F5x panel answers for a handle that is
 // no instance (2026-11-13): nothing changes (ghackt took it for the MINI box on the F25 X3, untried there).
 // The divisions are by constants (no division helper on QNX).
 void fitBox(u32 w, u32 h) {
@@ -1500,7 +1517,7 @@ void fitBox(u32 w, u32 h) {
   snprintf(m, sizeof m, "fitted to the picture buffer, %u x %u", w, h);
   logBox(m);
 }
-// ImageGetSize on the picture buffer, in the F54's form [handle] and the 6WB's [handle][01] (a cluster refuses the form it does not
+// ImageGetSize on the picture buffer, in the MINI F5x form [handle] and the BMW 6WB form [handle][01] (a cluster refuses the form it does not
 // take); 2 s for an answer. A switch's box and the 6WB plane stay as they are.
 void measureBox() {
   g_measureDue = false;

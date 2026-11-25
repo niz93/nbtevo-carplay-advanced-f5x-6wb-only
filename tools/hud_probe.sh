@@ -2,10 +2,10 @@
 # Runs ON THE HEAD UNIT (NBT Evo, over SSH). Probes the cluster's HUDTerminal (MOST FBlock 0x82/00) through the CarPlay menu
 # plugin's test channel (/dev/shmem/carplaymenu-hudcmd, hud.h runCmds): finds which drawing surfaces the cluster has, their sizes,
 # and which one is the distance bar, so CarPlay guidance can use the factory bar (PotentiometerSetValue 0x227).
-# Formats from the old NBT + 6WB cluster (github.com/JayJay3071/nbt-android-auto, docs/CLUSTER-HUDTERMINAL.md):
-#   C04 [inst u16][01]                   ImageGetSize -> answer [inst][01][w u16][h u16]  (6WB: bar 0x35 = 28 x 113)
-#       F54 (car, 2026-11-13): C04 [inst u16] only -> op d [inst][w u16][h u16]; with the 01 byte (or longer) op 9 [inst] 05 =
-#       ErrorAck "invalid length". sizes sends the F54 form; "sizes6wb" the 6WB one.
+# Formats from the shared MINI F5x panel and the BMW 6WB cluster (github.com/JayJay3071/nbt-android-auto, docs/CLUSTER-HUDTERMINAL.md):
+#   C04 [inst u16][01]                   ImageGetSize -> answer [inst][01][w u16][h u16]  (BMW 6WB: bar 0x35 = 28 x 113)
+#       MINI F5x (captured on F54, 2026-11-13): C04 [inst u16] only -> op d [inst][w u16][h u16]; with the 01 byte (or longer) op 9 [inst] 05 =
+#       ErrorAck "invalid length". sizes sends the MINI F5x form; "sizes6wb" the BMW 6WB one.
 #   227 [inst u16][value i32][02]        PotentiometerSetValue, value 0..255 (6WB: full = far, empty = at the maneuver)
 #   204 [inst u16][00|01]                SetVisibility
 # Needs: the plugin installed with "CarPlay directions in HUD" on (its MOST client runs the test channel), no CarPlay route active
@@ -21,12 +21,12 @@
 #   ksh hud_probe.sh bar <inst> keep             the same, but leave it visible at 0
 #   ksh hud_probe.sh concave [mini|6wa] [buf=6] [secs=6]   can the terminal fill NON-convex polygons? Three stages on the picture
 #                                                buffer (panel 1 on): a notched 7-point arrow, a U-turn (22-point half ring), a
-#                                                swallow-tail flag (NBT-AAD's 6WA shapes; mini = the F54 box (35,15)-(85,65)). Clean
+#                                                swallow-tail flag (NBT-AAD's 6WA shapes; mini = the shared MINI F5x box (35,15)-(85,65), measured on F54). Clean
 #                                                shapes = concave works (pictures could drop from ~64 calls to ~4); a filled hull,
 #                                                spikes or nothing = convex only, as hudshapes.h assumes
-#   ksh hud_probe.sh colours [first=0] [last=31] [secs=2] [buf=6]   a filled square in the F54 picture box for each fill colour
+#   ksh hud_probe.sh colours [first=0] [last=31] [secs=2] [buf=6]   a filled square in the MINI F5x picture box for each fill colour
 #                                                index (SetFillColor 21b) in turn, the index printed as it shows: which indexes are
-#                                                colours on this HUD (white 4; 10 drew nothing on the F54, car 2026-11-13)
+#                                                colours on this HUD (white 4; 10 drew nothing on the MINI F5x panel, measured on F54 on 2026-11-13)
 #   ksh hud_probe.sh text <inst> [secs=3]        SetText "123" on <inst> in the three forms (UTF-16 [00], ISO-8859-15 [01], UTF-8
 #                                                [02]), then empty again: which form, if any, this cluster takes there (op d) and
 #                                                shows (hud_text_handles moves the texts to other instances, issue #9)

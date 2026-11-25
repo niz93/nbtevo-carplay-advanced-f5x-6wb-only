@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env bash
 # Builds the CarPlay Advanced Settings plugin (ARMv7, QNX, freestanding) into plugin/.
 #
 # Needs only clang and ld.lld. No firmware files: the plugin's imports (HMI frameworks, QNX libc) are resolved at run time inside the
@@ -7,6 +7,10 @@
 set -e
 cd "$(dirname "$0")"
 OUT=plugin
+PYTHON=${PYTHON:-$(command -v python3 || command -v python)}
+[ -n "$PYTHON" ] || { echo "python3 or python not found (set PYTHON=)"; exit 1; }
+NM=${NM:-$(command -v llvm-nm || command -v nm)}
+[ -n "$NM" ] || { echo "llvm-nm or nm not found (set NM=)"; exit 1; }
 CF=(-target armv7-none-eabi -march=armv7-a -mfloat-abi=soft -ffreestanding -fPIC -Os -mno-unaligned-access -fno-exceptions -fno-rtti -nostdlib -Wno-everything)
 LLD=${LLD:-$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/gcc-ld/ld.lld}
 [ -x "$LLD" ] || LLD=$(command -v ld.lld) || { echo "ld.lld not found (set LLD=)"; exit 1; }
@@ -14,7 +18,7 @@ LD=($LLD -shared -z max-page-size=4096 -z common-page-size=4096 -z norelro -z no
 mkdir -p out/stubs $OUT
 
 # "Enable knob tilts": the HMI patch words for each supported build
-python3 -c '
+"$PYTHON" -c '
 import json, sys
 for var, path in zip(sys.argv[1::2], sys.argv[2::2]):
     d = json.load(open(path))
@@ -31,7 +35,7 @@ clang "${CF[@]}" -I. -c src/cpm.cpp -o out/cpm.o
 # libraries: the frameworks define _end/_edata/__bss_start/__exidx_* (lld then adds its own to libCarPlayMenu.so, in this order), and their bmw:: functions are typed
 # as functions (the stand-in defines every bmw:: symbol cpm.cpp imports as an empty function).
 printf '.data\n.globl __exidx_end, __bss_start, _end, _edata, __exidx_start\n__exidx_end: __bss_start: _end: _edata: __exidx_start: .word 0\n.text\n' > out/stubs/fw.s
-for s in $(nm -u out/cpm.o | awk '{print $NF}' | grep '^_ZN3bmw'); do printf '.globl %s\n.type %s,%%function\n%s: bx lr\n' $s $s $s >> out/stubs/fw.s; done
+for s in $("$NM" -u out/cpm.o | awk '{print $NF}' | grep '^_ZN3bmw'); do printf '.globl %s\n.type %s,%%function\n%s: bx lr\n' $s $s $s >> out/stubs/fw.s; done
 clang "${CF[@]}" -c out/stubs/fw.s -o out/stubs/fw.o
 echo > out/stubs/empty.c
 clang "${CF[@]}" -x c -c out/stubs/empty.c -o out/stubs/empty.o
@@ -46,7 +50,7 @@ LIBS=(-Lout/stubs -l:libc.so.3)
 # CarPlayMenu.xml; its XML is the main one cut down to states 20 (two rows), 81 and 93
 clang "${CF[@]}" -I. -DCPM_HUD_ONLY -c src/cpm.cpp -o out/cpm-hud.o
 "${LD[@]}" -soname libCarPlayMenu.so -o $OUT/libCarPlayMenu-hud.so out/cpm-hud.o -Lout/stubs -l:libAppFramework.A.so -l:libCoreFramework.A.so "${LIBS[@]}"
-python3 - $OUT/CarPlayMenu.xml $OUT/CarPlayMenu-hud.xml <<'HUDXML'
+"$PYTHON" - $OUT/CarPlayMenu.xml $OUT/CarPlayMenu-hud.xml <<'HUDXML'
 import re, sys
 import xml.etree.ElementTree as ET
 src, dst = sys.argv[1], sys.argv[2]
@@ -106,5 +110,5 @@ for v in kombi most both; do
   "${LD[@]}" --allow-multiple-definition -soname librghook.so -o $OUT/librghook-$v.so out/rghook-$v.o "${O[@]}" "${LIBS[@]}"
 done
 # menu texts
-python3 src/texts.py $OUT/CarPlayMenu_ALL_Texts.zip
+"$PYTHON" src/texts.py $OUT/CarPlayMenu_ALL_Texts.zip
 ls -l $OUT
